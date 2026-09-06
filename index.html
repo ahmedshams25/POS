@@ -330,6 +330,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
   import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js";
   import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+  import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyDCRbSO8WpdD92eAW5GoSyuc1vlcJP2I38",
@@ -344,6 +345,7 @@
   const app = initializeApp(firebaseConfig);
   const analytics = getAnalytics(app);
   const auth = getAuth(app);
+  const db = getFirestore(app);
 
   // إتاحة أدوات الفايربيز عالمياً للاستخدام في التطبيق
   window.firebaseAuth = auth;
@@ -351,12 +353,21 @@
   window.createUserWithEmailAndPassword = createUserWithEmailAndPassword;
   window.signOut = signOut;
 
+  window.db = db;
+  window.fsDoc = doc;
+  window.fsGetDoc = getDoc;
+  window.fsSetDoc = setDoc;
+  window.fsOnSnapshot = onSnapshot;
+
   onAuthStateChanged(auth, (user) => {
     document.getElementById('rootLoading').style.display = 'none';
     if (user) {
+      window.currentUid = user.uid;
       document.getElementById('authScreen').style.display = 'none';
       loadAll();
     } else {
+      window.currentUid = null;
+      if (window.unsubscribeUserDoc) { window.unsubscribeUserDoc(); window.unsubscribeUserDoc = null; }
       document.getElementById('authScreen').style.display = 'flex';
       document.getElementById('mobileApp').style.display = 'none';
       document.getElementById('desktopApp').style.display = 'none';
@@ -478,14 +489,6 @@ let mq = window.matchMedia('(min-width:900px)');
 let isDesktop = mq.matches;
 mq.addEventListener('change', e=>{ isDesktop = e.matches; render(); });
 
-async function sGet(key, fallback){
-  try{ const r = localStorage.getItem(key); return r ? JSON.parse(r) : fallback; }
-  catch(e){ return fallback; }
-}
-async function sSet(key, val){
-  try{ localStorage.setItem(key, JSON.stringify(val)); }
-  catch(e){ console.error('storage set failed', key, e); }
-}
 function uid(){ return Math.random().toString(36).slice(2,10); }
 
 function seedProducts(){
@@ -502,20 +505,66 @@ function seedProducts(){
   ];
 }
 
-async function loadAll(){
-  const [products, customers, sales, settings, categories] = await Promise.all([
-    sGet('products', null), sGet('customers', []), sGet('sales', []), sGet('settings', null), sGet('categories', null)
-  ]);
-  state.products = products || seedProducts();
-  if(!products) sSet('products', state.products);
-  state.customers = customers;
-  state.sales = sales;
-  state.categories = categories || defaultCategories;
-  if(!categories) sSet('categories', state.categories);
-  state.theme = (settings && settings.theme) || 'light';
-  state.currency = (settings && settings.currency) || 'ج.م';
+/* =====================================================================
+   CLOUD DATA LAYER (Firestore) — بديل localStorage
+   كل مستخدم عنده مستند واحد في users_data/{uid} فيه كل حقوله،
+   وبيتراقب لحظيًا (onSnapshot) عشان أي تغيير على أي جهاز يوصل لباقي الأجهزة فورًا.
+   ===================================================================== */
+function getUserDocRef(){
+  return window.fsDoc(window.db, 'users_data', window.currentUid);
+}
+
+// يحفظ حقل واحد بس (merge) — نفس توقيع الدالة القديمة عشان الباقي في الكود يفضل شغال زي ما هو
+async function sSet(key, val){
+  if(!window.currentUid) return;
+  try{
+    await window.fsSetDoc(getUserDocRef(), {[key]: val}, {merge:true});
+  }catch(e){
+    console.error('Firestore save failed', key, e);
+    toast('تعذر حفظ البيانات — تحقق من الاتصال بالإنترنت');
+  }
+}
+
+function applyCloudData(data){
+  state.products = data.products || [];
+  state.customers = data.customers || [];
+  state.sales = data.sales || [];
+  state.categories = (data.categories && data.categories.length) ? data.categories : defaultCategories;
+  const settings = data.settings || {};
+  state.theme = settings.theme || 'light';
+  state.currency = settings.currency || 'ج.م';
   document.body.setAttribute('data-theme', state.theme);
   render();
+}
+
+async function loadAll(){
+  const ref = getUserDocRef();
+  try{
+    const snap = await window.fsGetDoc(ref);
+    if(snap.exists()){
+      applyCloudData(snap.data());
+    } else {
+      // أول مرة يدخل بيها هذا المستخدم: ننشئ مستند ابتدائي ببيانات تجريبية
+      const initialData = {
+        products: seedProducts(),
+        customers: [],
+        sales: [],
+        categories: defaultCategories,
+        settings: {theme:'light', currency:'ج.م'}
+      };
+      await window.fsSetDoc(ref, initialData);
+      applyCloudData(initialData);
+    }
+  }catch(e){
+    console.error(e);
+    toast('تعذر تحميل البيانات من الحساب');
+  }
+
+  // مزامنة لحظية: أي تغيير من أي جهاز تاني هيوصل هنا فورًا
+  if(window.unsubscribeUserDoc) window.unsubscribeUserDoc();
+  window.unsubscribeUserDoc = window.fsOnSnapshot(ref, (snap)=>{
+    if(snap.exists()) applyCloudData(snap.data());
+  }, (err)=>{ console.error('snapshot error', err); });
 }
 
 let toastTimer;
