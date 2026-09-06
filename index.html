@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>نقطة البيع</title>
+<title>نقطة البيع - تسجيل الدخول</title>
 <style>
   :root{
     --bg:#F2F2F7; --card:#FFFFFF; --card2:#FFFFFF;
@@ -27,6 +27,17 @@
     overscroll-behavior-y:none; transition:background .25s ease, color .25s ease;
   }
   button, input, select, textarea{ font-family:inherit; }
+
+  /* Auth Screen Styles */
+  #authScreen{
+    display:flex; align-items:center; justify-content:center; min-height:100vh; padding:20px; background:var(--bg);
+  }
+  .auth-card{
+    background:var(--card); width:100%; max-width:400px; padding:30px 24px; border-radius:var(--radius);
+    box-shadow:var(--shadow); display:flex; flex-direction:column; gap:16px;
+  }
+  .auth-card h2{margin:0 0 10px; font-size:24px; font-weight:700; text-align:center;}
+  .auth-toggle{text-align:center; font-size:13.5px; color:var(--accent); cursor:pointer; margin-top:6px;}
 
   #mobileApp{max-width:560px; margin:0 auto; min-height:100%; position:relative; padding-bottom:calc(78px + var(--safe-b));}
 
@@ -275,6 +286,23 @@
 </head>
 <body data-theme="light">
 
+<!-- شاشة تسجيل الدخول -->
+<div id="authScreen" style="display:none;">
+  <div class="auth-card">
+    <h2 id="authTitle">تسجيل الدخول</h2>
+    <div class="field">
+      <label>البريد الإلكتروني</label>
+      <input type="email5" id="authEmail" placeholder="name@example.com">
+    </div>
+    <div class="field">
+      <label>كلمة المرور</label>
+      <input type="password" id="authPassword" placeholder="••••••••">
+    </div>
+    <button class="btn" id="authSubmitBtn" onclick="handleAuthSubmit()">دخول</button>
+    <div class="auth-toggle" onclick="toggleAuthMode()" id="authToggleText">ليس لديك حساب؟ إنشاء حساب جديد</div>
+  </div>
+</div>
+
 <div id="mobileApp" style="display:none;"><div class="loading">جاري التحميل...</div></div>
 <div id="desktopApp" style="display:none;"></div>
 <div id="rootLoading" class="loading">جاري التحميل...</div>
@@ -297,7 +325,81 @@
 <canvas id="scanCanvas" style="display:none;"></canvas>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
+<!-- Firebase SDKs -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js";
+  import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDCRbSO8WpdD92eAW5GoSyuc1vlcJP2I38",
+    authDomain: "pos-app-bfc67.firebaseapp.com",
+    projectId: "pos-app-bfc67",
+    storageBucket: "pos-app-bfc67.firebasestorage.app",
+    messagingSenderId: "468198888651",
+    appId: "1:468198888651:web:cd437e7d1eaca38405f74e",
+    measurementId: "G-Q4NYWJF2VD"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const analytics = getAnalytics(app);
+  const auth = getAuth(app);
+
+  // إتاحة أدوات الفايربيز عالمياً للاستخدام في التطبيق
+  window.firebaseAuth = auth;
+  window.signInWithEmailAndPassword = signInWithEmailAndPassword;
+  window.createUserWithEmailAndPassword = createUserWithEmailAndPassword;
+  window.signOut = signOut;
+
+  onAuthStateChanged(auth, (user) => {
+    document.getElementById('rootLoading').style.display = 'none';
+    if (user) {
+      document.getElementById('authScreen').style.display = 'none';
+      loadAll();
+    } else {
+      document.getElementById('authScreen').style.display = 'flex';
+      document.getElementById('mobileApp').style.display = 'none';
+      document.getElementById('desktopApp').style.display = 'none';
+    }
+  });
+</script>
+
 <script>
+/* =====================================================================
+   AUTH UI LOGIC
+   ===================================================================== */
+let isSignUpMode = false;
+function toggleAuthMode(){
+  isSignUpMode = !isSignUpMode;
+  document.getElementById('authTitle').textContent = isSignUpMode ? 'إنشاء حساب جديد' : 'تسجيل الدخول';
+  document.getElementById('authSubmitBtn').textContent = isSignUpMode ? 'إنشاء حساب' : 'دخول';
+  document.getElementById('authToggleText').textContent = isSignUpMode ? 'لديك حساب بالفعل؟ تسجيل الدخول' : 'ليس لديك حساب؟ إنشاء حساب جديد';
+}
+
+async function handleAuthSubmit(){
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value.trim();
+  if(!email || !password){ toast('الرجاء إدخال البريد وكلمة المرور'); return; }
+  try {
+    if(isSignUpMode){
+      await window.createUserWithEmailAndPassword(window.firebaseAuth, email, password);
+      toast('تم إنشاء الحساب وتسجيل الدخول بنجاح');
+    } else {
+      await window.signInWithEmailAndPassword(window.firebaseAuth, email, password);
+      toast('تم تسجيل الدخول بنجاح');
+    }
+  } catch(e){
+    toast('خطأ: ' + e.message);
+  }
+}
+
+async function handleLogout(){
+  if(confirm('هل تريد تسجيل الخروج؟')){
+    await window.signOut(window.firebaseAuth);
+    toast('تم تسجيل الخروج');
+  }
+}
+
 /* =====================================================================
    SOUND EFFECTS SYSTEM (Web Audio API - Professional Tone)
    ===================================================================== */
@@ -316,7 +418,6 @@ function playSound(type){
     gain.connect(audioCtx.destination);
     
     if(type === 'click'){
-      // Professional soft subtle tap
       osc.type = 'sine';
       osc.frequency.setValueAtTime(320, now);
       osc.frequency.exponentialRampToValueAtTime(120, now + 0.04);
@@ -325,16 +426,14 @@ function playSound(type){
       osc.start(now);
       osc.stop(now + 0.04);
     } else if(type === 'success'){
-      // Clean modern Apple-like success chime
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, now); // D5
-      osc.frequency.setValueAtTime(880, now + 0.08); // A5
+      osc.frequency.setValueAtTime(587.33, now);
+      osc.frequency.setValueAtTime(880, now + 0.08);
       gain.gain.setValueAtTime(0.08, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
       osc.start(now);
       osc.stop(now + 0.25);
     } else if(type === 'delete'){
-      // Smooth low deletion thud
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(180, now);
       osc.frequency.exponentialRampToValueAtTime(80, now + 0.12);
@@ -416,7 +515,6 @@ async function loadAll(){
   state.theme = (settings && settings.theme) || 'light';
   state.currency = (settings && settings.currency) || 'ج.م';
   document.body.setAttribute('data-theme', state.theme);
-  document.getElementById('rootLoading').style.display = 'none';
   render();
 }
 
@@ -500,6 +598,7 @@ function renderDesktop(){
       ${NAV_TABS.map(t=>`<button class="dash-nav-btn ${state.view===t.id?'active':''}" onclick="switchView('${t.id}')">${t.icon}${t.label}</button>`).join('')}
       <div class="dash-sidebar-bottom">
         <button class="dash-nav-btn" onclick="toggleTheme()">${ICONS.moon}${state.theme==='dark'?'الوضع الفاتح':'الوضع الداكن'}</button>
+        <button class="dash-nav-btn" onclick="handleLogout()" style="color:var(--danger);">${ICONS.trash}تسجيل الخروج</button>
       </div>
     </aside>
     <div class="dash-main">
@@ -695,9 +794,6 @@ function reopenCheckoutIfOpen(){
   if(document.getElementById('sheetOverlay').classList.contains('show')) openCheckoutSheet();
 }
 
-/* =====================================================================
-   FIXED: CUSTOMER SELECT MODAL WITH LIVE DOM FILTER PRESERVATION
-   ===================================================================== */
 function openCustomerSelectModal(){
   playSound('click');
   const query = (state.customerModalSearch || '').trim().toLowerCase();
@@ -729,7 +825,6 @@ function openCustomerSelectModal(){
     <div class="btn-row" style="margin-top:14px;"><button class="btn secondary" onclick="openCheckoutSheet()">رجوع</button></div>
   `);
   
-  // Keep focus on search input without closing keyboard
   setTimeout(()=>{
     const inp = document.getElementById('customerModalSearchInput');
     if(inp){ inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
@@ -814,9 +909,6 @@ async function confirmSale(){
   toast('تم الدفع بنجاح ✓');
 }
 
-/* =====================================================================
-   INVENTORY & LOCAL IMAGE UPLOAD
-   ===================================================================== */
 function filteredProducts(q){
   q = (q||'').trim();
   return q ? state.products.filter(p=>p.name.includes(q)) : state.products;
@@ -942,9 +1034,6 @@ async function deleteProduct(id){
   render(); toast('تم الحذف');
 }
 
-/* =====================================================================
-   FIXED: CUSTOMERS VIEW (AUTO LIVE FILTERING)
-   ===================================================================== */
 function filteredCustomers(q){
   q = (q||'').trim().toLowerCase();
   return q ? state.customers.filter(c=> c.name.toLowerCase().includes(q) || (c.phone && c.phone.includes(q))) : state.customers;
@@ -1025,9 +1114,6 @@ async function deleteCustomer(id){
   render(); toast('تم الحذف');
 }
 
-/* =====================================================================
-   REPORTS & ADVANCED INVOICE FILTERING
-   ===================================================================== */
 function computeReportData(){
   const today = new Date().toDateString();
   const todaySales = state.sales.filter(s=> new Date(s.date).toDateString()===today);
@@ -1217,9 +1303,6 @@ function openInvoiceDetails(saleId){
   `);
 }
 
-/* =====================================================================
-   SETTINGS & CATEGORIES
-   ===================================================================== */
 function settingsCardsHtml(){
   const catsHtml = state.categories.map(c=>`
     <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--divider);">
@@ -1249,8 +1332,8 @@ function settingsCardsHtml(){
       </div>
       <div style="max-height:180px; overflow-y:auto;">${catsHtml}</div>
     </div>
-    <div class="settings-row" onclick="resetDemo()" style="cursor:pointer;">
-      <div class="label" style="color:var(--danger);">إعادة تعيين البيانات</div><span style="color:var(--text2);">›</span>
+    <div class="settings-row" onclick="handleLogout()" style="cursor:pointer;">
+      <div class="label" style="color:var(--danger);">تسجيل الخروج من الحساب</div><span style="color:var(--text2);">›</span>
     </div>`;
 }
 function renderSettingsBody(){
@@ -1336,16 +1419,7 @@ async function changeCurrency(val){
   await sSet('settings', {theme:state.theme, currency:state.currency});
   render();
 }
-async function resetDemo(){
-  playSound('delete');
-  state.products = seedProducts(); state.customers=[]; state.sales=[]; state.cart=[]; state.categories=defaultCategories;
-  await Promise.all([sSet('products',state.products), sSet('customers',state.customers), sSet('sales',state.sales), sSet('categories',state.categories)]);
-  render(); toast('تمت إعادة التعيين');
-}
 
-/* =====================================================================
-   SCANNER
-   ===================================================================== */
 let scanStream, scanRAF;
 async function openScanner(){
   playSound('click');
@@ -1387,8 +1461,6 @@ function closeScanner(){
 }
 
 function escapeAttr(s){ return (s||'').replace(/"/g,'&quot;'); }
-
-loadAll();
 </script>
 </body>
 </html>
