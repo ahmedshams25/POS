@@ -292,7 +292,7 @@
     <h2 id="authTitle">تسجيل الدخول</h2>
     <div class="field">
       <label>البريد الإلكتروني</label>
-      <input type="email5" id="authEmail" placeholder="name@example.com">
+      <input type="email" id="authEmail" placeholder="name@example.com">
     </div>
     <div class="field">
       <label>كلمة المرور</label>
@@ -479,11 +479,11 @@ let isDesktop = mq.matches;
 mq.addEventListener('change', e=>{ isDesktop = e.matches; render(); });
 
 async function sGet(key, fallback){
-  try{ const r = await window.storage.get(key, false); return r ? JSON.parse(r.value) : fallback; }
+  try{ const r = localStorage.getItem(key); return r ? JSON.parse(r) : fallback; }
   catch(e){ return fallback; }
 }
 async function sSet(key, val){
-  try{ await window.storage.set(key, JSON.stringify(val), false); }
+  try{ localStorage.setItem(key, JSON.stringify(val)); }
   catch(e){ console.error('storage set failed', key, e); }
 }
 function uid(){ return Math.random().toString(36).slice(2,10); }
