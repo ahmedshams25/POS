@@ -1,58 +1,521 @@
-// Client Select Search Logic
-let selectedClient = null;
-
-function setupClientSearch(clientsData) {
-    const searchInput = document.getElementById('clientSearchInput');
-    const dropdownList = document.getElementById('clientDropdownList');
-    
-    if (!searchInput || !dropdownList) return;
-
-    // Render list helper
-    function renderList(items) {
-        dropdownList.innerHTML = '';
-        if (items.length === 0) {
-            dropdownList.innerHTML = `<div class="p-3 text-sm text-gray-400 text-center">لا توجد نتائج مطابقة</div>`;
-            return;
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام نقاط البيع والإدارة المطور</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { 50: '#f0fdf4', 500: '#22c55e', 600: '#16a34a', 700: '#15803d' }
+                    }
+                }
+            }
         }
-        
-        items.forEach(client => {
-            const item = document.createElement('div');
-            item.className = 'p-2.5 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer text-sm rounded-lg transition-colors flex justify-between items-center';
-            item.innerHTML = `<span>${client.name}</span> <span class="text-xs text-gray-400">${client.phone || ''}</span>`;
-            
-            // Use mousedown instead of click to prevent blur event from hiding dropdown before selection triggers
-            item.addEventListener('mousedown', (e) => {
-                e.preventDefault();
-                searchInput.value = client.name;
-                selectedClient = client;
-                dropdownList.classList.add('hidden');
-                playProSound('select'); // Professional sound effect
-                // Trigger any callback if needed
-                if (typeof onClientSelected === 'function') onClientSelected(client);
+    </script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-100 font-sans antialiased min-h-screen flex flex-col">
+
+    <!-- Header / Navbar -->
+    <header class="bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700 px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center space-x-4 space-x-reverse">
+            <h1 class="text-xl font-bold tracking-tight text-gray-900 dark:text-white flex items-center gap-2">
+                <i class="fa-solid fa-cash-register text-green-600"></i> نظام نقاط البيع
+            </h1>
+            <nav class="hidden md:flex space-x-2 space-x-reverse text-sm font-medium">
+                <button onclick="switchTab('pos')" id="nav-pos" class="px-3 py-2 rounded-lg bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 transition-colors">البيع السريع</button>
+                <button onclick="switchTab('clients')" id="nav-clients" class="px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">العملاء</button>
+                <button onclick="switchTab('invoices')" id="nav-invoices" class="px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">سجل الفواتير</button>
+            </nav>
+        </div>
+        <div class="flex items-center gap-3">
+            <button onclick="toggleDarkMode()" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300">
+                <i class="fa-solid fa-moon dark:hidden"></i>
+                <i class="fa-solid fa-sun hidden dark:block"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 p-4 md:p-6 max-w-7xl mx-auto w-full">
+
+        <!-- TAB 1: POS (البيع السريع) -->
+        <section id="tab-pos" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Products Grid Column -->
+            <div class="lg:col-span-2 flex flex-col gap-4">
+                <!-- Search & Filters -->
+                <div class="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm flex flex-col md:flex-row gap-3 justify-between items-center">
+                    <div class="relative w-full md:w-72">
+                        <span class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400">
+                            <i class="fa-solid fa-search"></i>
+                        </span>
+                        <input type="text" id="productSearchInput" placeholder="بحث عن منتج..." class="w-full pl-4 pr-10 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+                    </div>
+                    <!-- Client Selector with Search States Fixed -->
+                    <div class="relative w-full md:w-72">
+                        <label class="block text-xs text-gray-400 mb-1">العميل الحالي:</label>
+                        <input type="text" id="clientSearchInput" placeholder="اختر أو ابحث عن عميل..." autocomplete="off" class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+                        <div id="clientDropdownList" class="absolute z-50 left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-48 overflow-y-auto hidden"></div>
+                    </div>
+                </div>
+
+                <!-- Products Display -->
+                <div id="productsGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-4 overflow-y-auto max-h-[600px] p-1">
+                    <!-- Dynamic Products Generated Here -->
+                </div>
+            </div>
+
+            <!-- Cart / Checkout Column -->
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm flex flex-col justify-between h-[650px]">
+                <div>
+                    <h2 class="text-lg font-bold border-b dark:border-gray-700 pb-3 mb-3 flex justify-between items-center">
+                        <span>سلة المشتريات</span>
+                        <span id="cartCountBadge" class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-semibold">0 صنف</span>
+                    </h2>
+                    <div id="cartItemsContainer" class="overflow-y-auto max-h-[380px] space-y-3 pr-1">
+                        <div class="text-center py-12 text-gray-400 text-sm">السلة فارغة حالياً</div>
+                    </div>
+                </div>
+
+                <div class="border-t dark:border-gray-700 pt-4 mt-2">
+                    <div class="flex justify-between mb-2 text-sm">
+                        <span class="text-gray-500">المجموع الفرعي:</span>
+                        <span id="cartSubtotal" class="font-bold">0.00 ج.م</span>
+                    </div>
+                    <div class="flex justify-between mb-4 text-lg font-bold">
+                        <span>الإجمالي النهائي:</span>
+                        <span id="cartTotal" class="text-green-600">0.00 ج.م</span>
+                    </div>
+                    <button onclick="checkoutOrder()" class="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl shadow-sm transition-colors flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-check"></i> إتمام الدفع وتسجيل الفاتورة
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: CLIENTS (العملاء) -->
+        <section id="tab-clients" class="hidden space-y-4">
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm flex justify-between items-center">
+                <div class="relative w-full md:w-80">
+                    <span class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400">
+                        <i class="fa-solid fa-search"></i>
+                    </span>
+                    <!-- Instant Live Filter Input -->
+                    <input type="text" id="pageClientSearch" placeholder="بحث بالاسم أو رقم الهاتف..." class="w-full pl-4 pr-10 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+                </div>
+                <button onclick="openAddClientModal()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors">
+                    <i class="fa-solid fa-user-plus ml-1"></i> إضافة عميل جديد
+                </button>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+                <table class="w-full text-right border-collapse">
+                    <thead>
+                        <tr class="bg-gray-50 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400 text-xs uppercase border-b dark:border-gray-700">
+                            <th class="py-3 px-4">اسم العميل</th>
+                            <th class="py-3 px-4">رقم الهاتف</th>
+                            <th class="py-3 px-4">عدد الفواتير</th>
+                            <th class="py-3 px-4">الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="clientsTableBody" class="text-sm">
+                        <!-- Dynamic Clients Rows -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- TAB 3: INVOICES (سجل الفواتير الكامل) -->
+        <section id="tab-invoices" class="hidden space-y-4">
+            <!-- Advanced Multi-Filter Search Bar -->
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div class="relative">
+                    <input type="text" id="invoiceSearchInput" placeholder="بحث برقم الفاتورة، الاسم، أو التفاصيل..." class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+                </div>
+                <div>
+                    <select id="invoiceStatusFilter" class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+                        <option value="all">جميع الحالات</option>
+                        <option value="paid">مدفوعة</option>
+                        <option value="pending">معلقة</option>
+                    </select>
+                </div>
+                <div>
+                    عنصر تاريخ من: <input type="date" id="invoiceDateFrom" class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm">
+                </div>
+                <div>
+                    إلى تاريخ: <input type="date" id="invoiceDateTo" class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm">
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+                <table class="w-full text-right border-collapse">
+                    <thead>
+                        <tr class="bg-gray-50 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400 text-xs uppercase border-b dark:border-gray-700">
+                            <th class="py-3 px-4">رقم الفاتورة</th>
+                            <th class="py-3 px-4">اسم العميل</th>
+                            <th class="py-3 px-4">التاريخ</th>
+                            <th class="py-3 px-4">المبلغ</th>
+                            <th class="py-3 px-4">الحالة</th>
+                            <th class="py-3 px-4">التفاصيل</th>
+                        </tr>
+                    </thead>
+                    <tbody id="invoicesTableBody" class="text-sm">
+                        <!-- Dynamic Invoices Rows -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Professional Audio Synthesizer & Application Logic -->
+    <script>
+        // Professional Web Audio API Synthesizer (Replaces cartoon sounds)
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playProSound(type) {
+            if (!audioCtx) return;
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            const now = audioCtx.currentTime;
+
+            if (type === 'tap') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, now);
+                osc.frequency.exponentialRampToValueAtTime(400, now + 0.03);
+                gain.gain.setValueAtTime(0.04, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.03);
+            } else if (type === 'select') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(523.25, now);
+                osc.frequency.exponentialRampToValueAtTime(659.25, now + 0.06);
+                gain.gain.setValueAtTime(0.08, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.08);
+            } else if (type === 'success') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.setValueAtTime(880, now + 0.08);
+                gain.gain.setValueAtTime(0.06, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.2);
+            }
+        }
+
+        // Mock State Data
+        let appData = {
+            clients: [
+                { id: '1', name: 'أحمد محمد', phone: '01012345678', totalInvoices: 3 },
+                { id: '2', name: 'محمود علي', phone: '01198765432', totalInvoices: 1 },
+                { id: '3', name: 'شركة النور', phone: '01233344455', totalInvoices: 5 }
+            ],
+            products: [
+                { id: 'p1', name: 'شاشة سمارت 43 بوصة', price: 8500, stock: 12 },
+                { id: 'p2', name: 'سماعات بلوتوث لاسلكية', price: 650, stock: 25 },
+                { id: 'p3', name: 'لوحة مفاتيح ميكانيكية', price: 1200, stock: 8 },
+                { id: 'p4', name: 'ماوس ألعاب لاسلكي', price: 450, stock: 15 }
+            ],
+            invoices: [
+                { id: 'INV-1001', clientName: 'أحمد محمد', date: '2026-09-01', amount: 9150, status: 'paid', details: 'شراء شاشة وسماعات' },
+                { id: 'INV-1002', clientName: 'محمود علي', date: '2026-09-05', amount: 1200, status: 'pending', details: 'لوحة مفاتيح' }
+            ],
+            cart: []
+        };
+
+        let selectedClient = null;
+
+        // Navigation Tab Switching
+        function switchTab(tabId) {
+            ['pos', 'clients', 'invoices'].forEach(t => {
+                document.getElementById(`tab-${t}`).classList.add('hidden');
+                document.getElementById(`nav-${t}`).classList.remove('bg-green-50', 'dark:bg-green-900/30', 'text-green-600', 'dark:text-green-400');
             });
-            dropdownList.appendChild(item);
+            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+            document.getElementById(`nav-${tabId}`).classList.add('bg-green-50', 'dark:bg-green-900/30', 'text-green-600', 'dark:text-green-400');
+            playProSound('tap');
+        }
+
+        function toggleDarkMode() {
+            document.documentElement.classList.toggle('dark');
+            playProSound('tap');
+        }
+
+        // 1. Client Search States & Selection Logic
+        function setupClientSearch() {
+            const searchInput = document.getElementById('clientSearchInput');
+            const dropdownList = document.getElementById('clientDropdownList');
+            if (!searchInput || !dropdownList) return;
+
+            function renderList(items) {
+                dropdownList.innerHTML = '';
+                if (items.length === 0) {
+                    dropdownList.innerHTML = `<div class="p-3 text-sm text-gray-400 text-center">لا توجد نتائج مطابقة</div>`;
+                    return;
+                }
+                items.forEach(client => {
+                    const item = document.createElement('div');
+                    item.className = 'p-2.5 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer text-sm rounded-lg transition-colors flex justify-between items-center';
+                    item.innerHTML = `<span>${client.name}</span> <span class="text-xs text-gray-400">${client.phone || ''}</span>`;
+                    
+                    item.addEventListener('mousedown', (e) => {
+                        e.preventDefault();
+                        searchInput.value = client.name;
+                        selectedClient = client;
+                        dropdownList.classList.add('hidden');
+                        playProSound('select');
+                    });
+                    dropdownList.appendChild(item);
+                });
+            }
+
+            searchInput.addEventListener('focus', () => {
+                dropdownList.classList.remove('hidden');
+                renderList(appData.clients);
+            });
+
+            searchInput.addEventListener('input', (e) => {
+                const query = e.target.value.toLowerCase().trim();
+                const filtered = appData.clients.filter(c => 
+                    c.name.toLowerCase().includes(query) || (c.phone && c.phone.includes(query))
+                );
+                dropdownList.classList.remove('hidden');
+                renderList(filtered);
+                playProSound('tap');
+            });
+
+            searchInput.addEventListener('blur', () => {
+                setTimeout(() => { dropdownList.classList.add('hidden'); }, 200);
+            });
+        }
+
+        // 2. Instant Live Filtering on Clients Page
+        function setupInstantClientFilter() {
+            const searchInput = document.getElementById('pageClientSearch');
+            if (!searchInput) return;
+
+            searchInput.addEventListener('input', (e) => {
+                const query = e.target.value.toLowerCase().trim();
+                const filtered = appData.clients.filter(client => 
+                    (client.name && client.name.toLowerCase().includes(query)) ||
+                    (client.phone && client.phone.includes(query))
+                );
+                renderClientsTable(filtered);
+                playProSound('tap');
+            });
+        }
+
+        function renderClientsTable(clients) {
+            const tableBody = document.getElementById('clientsTableBody');
+            if (!tableBody) return;
+            tableBody.innerHTML = '';
+            
+            if (clients.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="4" class="text-center py-6 text-gray-400">لا توجد بيانات مطابقة للبحث</td></tr>`;
+                return;
+            }
+
+            clients.forEach(client => {
+                tableBody.innerHTML += `
+                    <tr class="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                        <td class="py-3 px-4 font-medium">${client.name}</td>
+                        <td class="py-3 px-4 text-gray-600 dark:text-gray-400">${client.phone || '-'}</td>
+                        <td class="py-3 px-4 text-gray-600 dark:text-gray-400">${client.totalInvoices || 0}</td>
+                        <td class="py-3 px-4">
+                            <span class="text-blue-600 dark:text-blue-400 text-sm font-medium cursor-pointer">عرض</span>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        // 3. Advanced Multi-Filter Search for Full Invoices Record
+        function setupAdvancedInvoiceSearch() {
+            const searchInput = document.getElementById('invoiceSearchInput');
+            const statusFilter = document.getElementById('invoiceStatusFilter');
+            const dateFromFilter = document.getElementById('invoiceDateFrom');
+            const dateToFilter = document.getElementById('invoiceDateTo');
+
+            function filterInvoices() {
+                const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+                const status = statusFilter ? statusFilter.value : 'all';
+                const dateFrom = dateFromFilter ? dateFromFilter.value : '';
+                const dateTo = dateToFilter ? dateToFilter.value : '';
+
+                const filtered = appData.invoices.filter(inv => {
+                    const matchText = 
+                        (inv.id && inv.id.toString().toLowerCase().includes(query)) ||
+                        (inv.clientName && inv.clientName.toLowerCase().includes(query)) ||
+                        (inv.details && inv.details.toLowerCase().includes(query));
+
+                    const matchStatus = (status === 'all' || inv.status === status);
+                    let matchDate = true;
+                    if (dateFrom && inv.date < dateFrom) matchDate = false;
+                    if (dateTo && inv.date > dateTo) matchDate = false;
+
+                    return matchText && matchStatus && matchDate;
+                });
+
+                renderInvoicesTable(filtered);
+            }
+
+            if (searchInput) searchInput.addEventListener('input', () => { filterInvoices(); playProSound('tap'); });
+            if (statusFilter) statusFilter.addEventListener('change', () => { filterInvoices(); playProSound('select'); });
+            if (dateFromFilter) dateFromFilter.addEventListener('change', filterInvoices);
+            if (dateToFilter) dateToFilter.addEventListener('change', filterInvoices);
+        }
+
+        function renderInvoicesTable(invoices) {
+            const tableBody = document.getElementById('invoicesTableBody');
+            if (!tableBody) return;
+            tableBody.innerHTML = '';
+
+            if (invoices.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="6" class="text-center py-6 text-gray-400">لا توجد فواتير مطابقة لخيارات البحث</td></tr>`;
+                return;
+            }
+
+            invoices.forEach(inv => {
+                const statusBadge = inv.status === 'paid' 
+                    ? `<span class="bg-green-100 text-green-700 px-2.5 py-1 rounded-full text-xs font-semibold">مدفوعة</span>`
+                    : `<span class="bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full text-xs font-semibold">معلقة</span>`;
+
+                tableBody.innerHTML += `
+                    <tr class="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                        <td class="py-3 px-4 font-mono font-medium">${inv.id}</td>
+                        <td class="py-3 px-4">${inv.clientName}</td>
+                        <td class="py-3 px-4 text-gray-600 dark:text-gray-400">${inv.date}</td>
+                        <td class="py-3 px-4 font-bold text-green-600">${inv.amount} ج.م</td>
+                        <td class="py-3 px-4">${statusBadge}</td>
+                        <td class="py-3 px-4 text-gray-500 text-xs">${inv.details || '-'}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        // POS Products & Cart functionality
+        function renderProducts(productsToRender) {
+            const grid = document.getElementById('productsGrid');
+            if (!grid) return;
+            grid.innerHTML = '';
+
+            productsToRender.forEach(prod => {
+                grid.innerHTML += `
+                    <div onclick="addToCart('${prod.id}')" class="bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-green-500 cursor-pointer shadow-sm transition-all flex flex-col justify-between">
+                        <div>
+                            <div class="font-bold text-sm mb-1">${prod.name}</div>
+                            <div class="text-xs text-gray-400">المخزون: ${prod.stock}</div>
+                        </div>
+                        <div class="mt-4 flex justify-between items-center">
+                            <span class="text-green-600 font-bold text-sm">${prod.price} ج.م</span>
+                            <button class="w-7 h-7 bg-green-50 dark:bg-green-900/30 text-green-600 rounded-lg flex items-center justify-center text-xs"><i class="fa-solid fa-plus"></i></button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function addToCart(productId) {
+            const product = appData.products.find(p => p.id === productId);
+            if (!product || product.stock <= 0) return;
+
+            const existing = appData.cart.find(item => item.id === productId);
+            if (existing) {
+                existing.qty++;
+            } else {
+                appData.cart.push({ id: product.id, name: product.name, price: product.price, qty: 1 });
+            }
+            renderCart();
+            playProSound('tap');
+        }
+
+        function renderCart() {
+            const container = document.getElementById('cartItemsContainer');
+            const badge = document.getElementById('cartCountBadge');
+            const subtotalEl = document.getElementById('cartSubtotal');
+            const totalEl = document.getElementById('cartTotal');
+            if (!container) return;
+
+            container.innerHTML = '';
+            let subtotal = 0;
+            let totalCount = 0;
+
+            if (appData.cart.length === 0) {
+                container.innerHTML = `<div class="text-center py-12 text-gray-400 text-sm">السلة فارغة حالياً</div>`;
+                badge.innerText = `0 صنف`;
+                subtotalEl.innerText = `0.00 ج.م`;
+                totalEl.innerText = `0.00 ج.م`;
+                return;
+            }
+
+            appData.cart.forEach((item, index) => {
+                subtotal += item.price * item.qty;
+                totalCount += item.qty;
+                container.innerHTML += `
+                    <div class="flex justify-between items-center bg-gray-50 dark:bg-gray-700/50 p-2.5 rounded-lg text-sm">
+                        <div>
+                            <div class="font-medium">${item.name}</div>
+                            <div class="text-xs text-gray-400">${item.price} ج.م × ${item.qty}</div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold">${item.price * item.qty} ج.م</span>
+                            <button onclick="removeFromCart(${index})" class="text-red-500 hover:text-red-700 p-1"><i class="fa-solid fa-trash text-xs"></i></button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            badge.innerText = `${totalCount} صنف`;
+            subtotalEl.innerText = `${subtotal.toLocaleString()} ج.م`;
+            totalEl.innerText = `${subtotal.toLocaleString()} ج.م`;
+        }
+
+        function removeFromCart(index) {
+            appData.cart.splice(index, 1);
+            renderCart();
+            playProSound('tap');
+        }
+
+        function checkoutOrder() {
+            if (appData.cart.length === 0) return;
+            playProSound('success');
+            alert('تم تسجيل الفاتورة بنجاح!');
+            appData.cart = [];
+            renderCart();
+        }
+
+        // Initialization on Load
+        window.addEventListener('DOMContentLoaded', () => {
+            setupClientSearch();
+            setupInstantClientFilter();
+            setupAdvancedInvoiceSearch();
+            renderProducts(appData.products);
+            renderClientsTable(appData.clients);
+            renderInvoicesTable(appData.invoices);
         });
-    }
-
-    // Event Listeners for Search States
-    searchInput.addEventListener('focus', () => {
-        dropdownList.classList.remove('hidden');
-        renderList(clientsData);
-    });
-
-    searchInput.addEventListener('input', (e) => {
-        const query = e.target.value.toLowerCase().trim();
-        const filtered = clientsData.filter(c => 
-            c.name.toLowerCase().includes(query) || (c.phone && c.phone.includes(query))
-        );
-        dropdownList.classList.remove('hidden');
-        renderList(filtered);
-    });
-
-    searchInput.addEventListener('blur', () => {
-        // Small timeout to allow mousedown on dropdown items to fire first
-        setTimeout(() => {
-            dropdownList.classList.add('hidden');
-        }, 200);
-    });
-}
+    </script>
+</body>
+</html>
