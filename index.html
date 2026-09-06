@@ -206,8 +206,11 @@
   .scanner-top{display:flex; justify-content:space-between; align-items:center; padding:16px; color:#fff;}
   .scanner-video-box{position:relative; flex:1; overflow:hidden; max-width:640px; width:100%; margin:0 auto;}
   .scanner-video-box video{width:100%; height:100%; object-fit:cover;}
-  .scan-frame{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:70%; aspect-ratio:1; border:3px solid #fff; border-radius:20px; box-shadow:0 0 0 2000px rgba(0,0,0,.45);}
-  .scanner-hint{color:#fff; text-align:center; padding:16px; font-size:13.5px; opacity:.8;}
+  .scan-frame{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:84%; max-width:440px; aspect-ratio:3/2; border:3px solid #fff; border-radius:16px; box-shadow:0 0 0 2000px rgba(0,0,0,.5); overflow:hidden;}
+  .scan-line{position:absolute; left:4%; right:4%; top:6%; height:2px; background:linear-gradient(90deg, transparent, #30D158, transparent); box-shadow:0 0 8px #30D158; animation:scanmove 1.7s ease-in-out infinite;}
+  @keyframes scanmove{0%{top:6%;} 50%{top:92%;} 100%{top:6%;}}
+  .scanner-hint{color:#fff; text-align:center; padding:14px 16px 4px; font-size:13.5px; opacity:.9;}
+  .manual-entry-wrap{display:flex; justify-content:center; padding:10px 16px 20px;}
 
   #desktopApp{display:flex; min-height:100vh;}
   .dash-sidebar{
@@ -314,17 +317,17 @@
   <div class="scanner-top">
     <button class="icon-btn" onclick="closeScanner()" style="background:rgba(255,255,255,.15); color:#fff;">✕</button>
     <span style="font-weight:600;">امسح كود المنتج</span>
-    <span style="width:36px;"></span>
+    <button class="icon-btn" id="torchBtn" onclick="toggleTorch()" style="background:rgba(255,255,255,.15); color:#fff; display:none;"><svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M11 21h-1l1-7H7.5c-.58 0-.57-.32-.38-.66.19-.34.05-.08.07-.12C8.48 10.94 10.42 7.54 13 3h1l-1 7h3.5c.49 0 .56.33.47.51l-.07.15C12.96 17.55 11 21 11 21z"/></svg></button>
   </div>
   <div class="scanner-video-box">
     <video id="scanVideo" playsinline muted></video>
-    <div class="scan-frame"></div>
+    <div class="scan-frame"><div class="scan-line"></div></div>
   </div>
-  <div class="scanner-hint">وجّه الكاميرا نحو رمز QR أو الباركود الخاص بالمنتج</div>
+  <div class="scanner-hint">وجّه الكاميرا نحو الباركود أو رمز QR بحيث يملأ الإطار، وثبّت يدك لثانية</div>
+  <div class="manual-entry-wrap"><button class="btn-small" onclick="openManualCodeEntry()">إدخال الكود يدويًا</button></div>
 </div>
-<canvas id="scanCanvas" style="display:none;"></canvas>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
+<script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
 <!-- Firebase SDKs -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
@@ -1469,44 +1472,111 @@ async function changeCurrency(val){
   render();
 }
 
-let scanStream, scanRAF;
+let zxingReader = null;
+let zxingControls = null;
+let currentVideoTrack = null;
+let torchOn = false;
+
+function getZxingReader(){
+  if(!zxingReader){
+    const hints = new Map();
+    // ندعم الباركود العادي (اللي بيتحط على المنتجات) والـ QR مع بعض
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+      ZXing.BarcodeFormat.QR_CODE,
+      ZXing.BarcodeFormat.EAN_13,
+      ZXing.BarcodeFormat.EAN_8,
+      ZXing.BarcodeFormat.UPC_A,
+      ZXing.BarcodeFormat.UPC_E,
+      ZXing.BarcodeFormat.CODE_128,
+      ZXing.BarcodeFormat.CODE_39,
+      ZXing.BarcodeFormat.ITF,
+      ZXing.BarcodeFormat.CODABAR
+    ]);
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    // 150ms بين كل محاولة مسح ومحاولة، متوازن بين السرعة واستهلاك الأداء
+    zxingReader = new ZXing.BrowserMultiFormatReader(hints, 150);
+  }
+  return zxingReader;
+}
+
 async function openScanner(){
   playSound('click');
   document.getElementById('scannerWrap').classList.add('show');
+  document.getElementById('torchBtn').style.display = 'none';
+  torchOn = false;
   try{
-    scanStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
-    const video = document.getElementById('scanVideo');
-    video.srcObject = scanStream;
-    await video.play();
-    scanLoop();
+    const reader = getZxingReader();
+    // دقة أعلى + محاولة استخدام الكاميرا الخلفية + تركيز تلقائي مستمر لتفادي عدم وضوح الصورة
+    const constraints = {
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        advanced: [{ focusMode: 'continuous' }]
+      }
+    };
+    zxingControls = await reader.decodeFromConstraints(constraints, 'scanVideo', (result) => {
+      if(result){ onScanResult(result.getText()); }
+    });
+
+    // تفعيل زرار الفلاش لو الجهاز بيدعمه (مفيد في الإضاءة الضعيفة)
+    const videoEl = document.getElementById('scanVideo');
+    const stream = videoEl.srcObject;
+    if(stream){
+      currentVideoTrack = stream.getVideoTracks()[0];
+      const caps = currentVideoTrack.getCapabilities ? currentVideoTrack.getCapabilities() : {};
+      if(caps && caps.torch){ document.getElementById('torchBtn').style.display = 'flex'; }
+    }
   }catch(e){
-    toast('تعذّر الوصول للكاميرا — تأكد من إذن الوصول');
+    console.error(e);
+    toast('تعذّر الوصول للكاميرا — تأكد من إذن الوصول من إعدادات المتصفح');
     closeScanner();
   }
 }
-function scanLoop(){
-  const video = document.getElementById('scanVideo');
-  const canvas = document.getElementById('scanCanvas');
-  if(video.readyState===video.HAVE_ENOUGH_DATA){
-    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video,0,0,canvas.width,canvas.height);
-    const img = ctx.getImageData(0,0,canvas.width,canvas.height);
-    const code = window.jsQR ? jsQR(img.data, img.width, img.height) : null;
-    if(code && code.data){ onScanResult(code.data); return; }
+
+async function toggleTorch(){
+  if(!currentVideoTrack) return;
+  try{
+    torchOn = !torchOn;
+    await currentVideoTrack.applyConstraints({ advanced: [{ torch: torchOn }] });
+  }catch(e){
+    console.error('الفلاش غير مدعوم على هذا الجهاز', e);
+    toast('الفلاش غير مدعوم على هذا الجهاز');
   }
-  scanRAF = requestAnimationFrame(scanLoop);
 }
+
 function onScanResult(data){
   closeScanner();
-  const p = state.products.find(pr=> pr.code===data.trim());
+  const clean = (data || '').trim();
+  const p = state.products.find(pr=> pr.code===clean);
   if(p){ addToCart(p.id); }
-  else toast(`لم يتم العثور على منتج بالكود: ${data.slice(0,20)}`);
+  else toast(`لم يتم العثور على منتج بالكود: ${clean.slice(0,20)}`);
 }
+
 function closeScanner(){
   document.getElementById('scannerWrap').classList.remove('show');
-  cancelAnimationFrame(scanRAF);
-  if(scanStream){ scanStream.getTracks().forEach(t=>t.stop()); scanStream=null; }
+  if(zxingControls){ try{ zxingControls.stop(); }catch(e){} zxingControls = null; }
+  currentVideoTrack = null;
+  torchOn = false;
+}
+
+function openManualCodeEntry(){
+  closeScanner();
+  playSound('click');
+  openSheet(`
+    <h2>إدخال كود المنتج يدويًا</h2>
+    <div class="field"><label>كود المنتج</label><input id="manualCodeInput" placeholder="اكتب الكود المطبوع على المنتج" inputmode="numeric"></div>
+    <button class="btn" onclick="submitManualCode()">بحث وإضافة للسلة</button>
+    <div class="btn-row"><button class="btn secondary" onclick="closeSheet()">إلغاء</button></div>
+  `);
+  setTimeout(()=>{ const el = document.getElementById('manualCodeInput'); if(el) el.focus(); }, 60);
+}
+function submitManualCode(){
+  const el = document.getElementById('manualCodeInput');
+  const val = el ? el.value.trim() : '';
+  if(!val){ toast('من فضلك اكتب الكود'); return; }
+  closeSheet();
+  onScanResult(val);
 }
 
 function escapeAttr(s){ return (s||'').replace(/"/g,'&quot;'); }
