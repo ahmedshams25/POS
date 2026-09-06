@@ -64,11 +64,13 @@
     display:flex; flex-direction:column; gap:6px; cursor:pointer; user-select:none; position:relative;
   }
   .product-card:active{transform:scale(.97);}
-  .p-emoji{font-size:28px;}
-  .p-name{font-size:14.5px; font-weight:600; line-height:1.3;}
+  .p-img-wrap{width:100%; height:110px; border-radius:12px; background:var(--card2); overflow:hidden; display:flex; align-items:center; justify-content:center;}
+  .p-img-wrap img{width:100%; height:100%; object-fit:cover;}
+  .p-img-wrap svg{width:36px; height:36px; color:var(--text2); opacity:.5;}
+  .p-name{font-size:14.5px; font-weight:600; line-height:1.3; margin-top:4px;}
   .p-sub{font-size:12px; color:var(--text2);}
   .p-price{font-size:15px; font-weight:700; color:var(--accent); margin-top:2px;}
-  .stock-badge{position:absolute; top:10px; left:10px; font-size:10px; padding:2px 7px; border-radius:100px; background:var(--card2); color:var(--text2); font-weight:600;}
+  .stock-badge{position:absolute; top:10px; left:10px; font-size:10px; padding:2px 7px; border-radius:100px; background:var(--card2); color:var(--text2); font-weight:600; z-index:2;}
   .stock-badge.low{color:#fff; background:var(--danger);}
 
   .section-title{font-size:20px; font-weight:700; margin:14px 2px 6px;}
@@ -306,9 +308,9 @@ const ICONS = {
   moon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg>',
   box2:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>'
 };
-const CATS = ['الكل','مشروبات','مأكولات','حلويات','أخرى'];
-const EMOJI = {'مشروبات':'🥤','مأكولات':'🍔','حلويات':'🍰','أخرى':'📦'};
-const NAV_TABS = [
+
+let defaultCategories = ['مشروبات','مأكولات','حلويات','أخرى'];
+let NAV_TABS = [
   {id:'sales', label:'المبيعات', icon:ICONS.cart},
   {id:'inventory', label:'المخزون', icon:ICONS.box},
   {id:'customers', label:'العملاء', icon:ICONS.users},
@@ -318,8 +320,8 @@ const NAV_TABS = [
 
 /* ============================= STATE ============================= */
 let state = {
-  products: [], customers: [], sales: [], cart: [],
-  theme: 'light', currency: 'ج.م', view: 'sales', cat: 'الكل', search: '', invSearch: '', custSearch: ''
+  products: [], customers: [], sales: [], cart: [], categories: [],
+  theme: 'light', currency: 'ج.م', view: 'sales', cat: 'الكل', search: '', invSearch: '', custSearch: '', customerSearchQuery: ''
 };
 let mq = window.matchMedia('(min-width:900px)');
 let isDesktop = mq.matches;
@@ -338,26 +340,28 @@ function uid(){ return Math.random().toString(36).slice(2,10); }
 
 function seedProducts(){
   return [
-    {id:uid(), name:'قهوة أمريكانو', price:35, category:'مشروبات', stock:40, code:'1001', emoji:'☕'},
-    {id:uid(), name:'كابتشينو', price:40, category:'مشروبات', stock:35, code:'1002', emoji:'☕'},
-    {id:uid(), name:'عصير برتقال', price:25, category:'مشروبات', stock:20, code:'1003', emoji:'🍊'},
-    {id:uid(), name:'برجر لحم', price:85, category:'مأكولات', stock:15, code:'2001', emoji:'🍔'},
-    {id:uid(), name:'ساندويتش جبنة', price:45, category:'مأكولات', stock:22, code:'2002', emoji:'🥪'},
-    {id:uid(), name:'بيتزا صغيرة', price:70, category:'مأكولات', stock:12, code:'2003', emoji:'🍕'},
-    {id:uid(), name:'تشيز كيك', price:55, category:'حلويات', stock:10, code:'3001', emoji:'🍰'},
-    {id:uid(), name:'كوكيز', price:20, category:'حلويات', stock:30, code:'3002', emoji:'🍪'},
-    {id:uid(), name:'مياه معدنية', price:10, category:'أخرى', stock:60, code:'4001', emoji:'💧'}
+    {id:uid(), name:'قهوة أمريكانو', price:35, category:'مشروبات', stock:40, code:'1001', image:''},
+    {id:uid(), name:'كابتشينو', price:40, category:'مشروبات', stock:35, code:'1002', image:''},
+    {id:uid(), name:'عصير برتقال', price:25, category:'مشروبات', stock:20, code:'1003', image:''},
+    {id:uid(), name:'برجر لحم', price:85, category:'مأكولات', stock:15, code:'2001', image:''},
+    {id:uid(), name:'ساندويتش جبنة', price:45, category:'مأكولات', stock:22, code:'2002', image:''},
+    {id:uid(), name:'بيتزا صغيرة', price:70, category:'مأكولات', stock:12, code:'2003', image:''},
+    {id:uid(), name:'تشيز كيك', price:55, category:'حلويات', stock:10, code:'3001', image:''},
+    {id:uid(), name:'كوكيز', price:20, category:'حلويات', stock:30, code:'3002', image:''},
+    {id:uid(), name:'مياه معدنية', price:10, category:'أخرى', stock:60, code:'4001', image:''}
   ];
 }
 
 async function loadAll(){
-  const [products, customers, sales, settings] = await Promise.all([
-    sGet('products', null), sGet('customers', []), sGet('sales', []), sGet('settings', null)
+  const [products, customers, sales, settings, categories] = await Promise.all([
+    sGet('products', null), sGet('customers', []), sGet('sales', []), sGet('settings', null), sGet('categories', null)
   ]);
   state.products = products || seedProducts();
   if(!products) sSet('products', state.products);
   state.customers = customers;
   state.sales = sales;
+  state.categories = categories || defaultCategories;
+  if(!categories) sSet('categories', state.categories);
   state.theme = (settings && settings.theme) || 'light';
   state.currency = (settings && settings.currency) || 'ج.م';
   document.body.setAttribute('data-theme', state.theme);
@@ -375,7 +379,7 @@ function toast(msg){
   toastTimer = setTimeout(()=>t.classList.remove('show'), 2000);
 }
 
-/* ============================= SHEET (modal / bottom-sheet) ============================= */
+/* ============================= SHEET ============================= */
 function openSheet(html){
   const overlay = document.getElementById('sheetOverlay');
   overlay.classList.toggle('centered', isDesktop);
@@ -405,6 +409,7 @@ function renderMobile(){
   else if(state.view==='reports') body = renderReportsBody();
   else if(state.view==='settings') body = renderSettingsBody();
 
+  const allCats = ['الكل', ...state.categories];
   app.innerHTML = `
     ${renderMobileHeader()}
     <main class="mobile-main">${body}</main>
@@ -422,9 +427,10 @@ function renderMobileHeader(){
     ? `<button class="icon-btn" onclick="openScanner()">${ICONS.qr}</button>`
     : `<button class="icon-btn" onclick="toggleTheme()">${ICONS.moon}</button>`;
   let extra = '';
+  const allCats = ['الكل', ...state.categories];
   if(state.view==='sales'){
     extra = `<div class="search">${ICONS.search}<input placeholder="ابحث عن منتج" value="${escapeAttr(state.search)}" oninput="state.search=this.value; render()"></div>
-    <div class="chips">${CATS.map(c=>`<button class="chip ${state.cat===c?'active':''}" onclick="state.cat='${c}'; render()">${c}</button>`).join('')}</div>`;
+    <div class="chips">${allCats.map(c=>`<button class="chip ${state.cat===c?'active':''}" onclick="state.cat='${c}'; render()">${c}</button>`).join('')}</div>`;
   } else if(state.view==='inventory'){
     extra = `<div class="search">${ICONS.search}<input placeholder="ابحث في المخزون" value="${escapeAttr(state.invSearch)}" oninput="state.invSearch=this.value; render()"></div>`;
   } else if(state.view==='customers'){
@@ -480,16 +486,18 @@ function renderDesktopContent(){
   if(state.view==='settings') return renderSettingsDashboard();
 }
 
-/* ---- Desktop: POS (products + persistent order panel) ---- */
+/* ---- Desktop: POS ---- */
 function renderPosLayout(){
+  const allCats = ['الكل', ...state.categories];
   return `<div class="pos-layout">
     <div class="pos-products">
-      <div class="dash-chips" style="margin-bottom:16px;">${CATS.map(c=>`<button class="chip ${state.cat===c?'active':''}" onclick="state.cat='${c}'; renderDesktop()">${c}</button>`).join('')}</div>
+      <div class="dash-chips" style="margin-bottom:16px;">${allCats.map(c=>`<button class="chip ${state.cat===c?'active':''}" onclick="state.cat='${c}'; renderDesktop()">${c}</button>`).join('')}</div>
       ${renderSalesGrid()}
     </div>
     <div class="order-panel">${renderOrderPanel()}</div>
   </div>`;
 }
+
 function renderOrderPanel(){
   const count = state.cart.reduce((s,l)=>s+l.qty,0);
   const rows = state.cart.map(l=>{
@@ -500,12 +508,20 @@ function renderOrderPanel(){
       <div class="qty-ctrl"><button onclick="changeQty('${p.id}',-1)">−</button><span>${l.qty}</span><button onclick="changeQty('${p.id}',1)">+</button></div>
     </div>`;
   }).join('');
-  const custOptions = `<option value="">بدون عميل</option>` + state.customers.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  
+  const query = (state.customerSearchQuery || '').trim().toLowerCase();
+  const filteredCusts = query ? state.customers.filter(c => c.name.toLowerCase().includes(query) || (c.phone && c.phone.includes(query))) : state.customers;
+  const custOptions = `<option value="">بدون عميل</option>` + filteredCusts.map(c=>`<option value="${c.id}">${c.name} ${c.phone? '('+c.phone+')':''}</option>`).join('');
+
   return `
     <h3>الطلب الحالي <span class="count-pill">${count} صنف</span></h3>
     <div class="order-lines">${state.cart.length ? rows : `<div class="empty" style="padding:30px 10px;">${ICONS.cart}<div>السلة فارغة — اضغط على منتج لإضافته</div></div>`}</div>
     ${state.cart.length ? `
-    <div class="field"><label>العميل (اختياري)</label><select id="chkCustomer">${custOptions}</select></div>
+    <div class="field">
+      <label>العميل (اختياري)</label>
+      <input type="text" placeholder="ابحث عن العميل بالاسم أو الرقم..." value="${escapeAttr(state.customerSearchQuery)}" oninput="state.customerSearchQuery=this.value; reopenCheckoutIfOpen();" style="margin-bottom:6px;">
+      <select id="chkCustomer">${custOptions}</select>
+    </div>
     <div class="field"><label>طريقة الدفع</label>
       <div class="chips" id="paySeg" style="padding:0; margin:0;">
         <button type="button" class="chip active" onclick="pickPay(this,'نقدي')">نقدي</button>
@@ -518,17 +534,18 @@ function renderOrderPanel(){
   `;
 }
 
-/* ---- Shared: product grid (used mobile + desktop) ---- */
+/* ---- Shared: product grid ---- */
 function renderSalesGrid(){
   let list = state.products.filter(p=> state.cat==='الكل' || p.category===state.cat);
-  const q = (isDesktop? state.search : state.search).trim();
+  const q = state.search.trim();
   if(q) list = list.filter(p=> p.name.includes(q));
   if(!list.length) return `<div class="empty">${ICONS.box2}<div>لا توجد منتجات مطابقة</div></div>`;
   return `<div class="grid">${list.map(p=>{
     const low = p.stock<=5;
+    const imgHtml = p.image ? `<img src="${escapeAttr(p.image)}" alt="${escapeAttr(p.name)}">` : ICONS.box2;
     return `<div class="product-card" onclick="addToCart('${p.id}')">
       <span class="stock-badge ${low?'low':''}">${p.stock} متبقي</span>
-      <div class="p-emoji">${p.emoji||'📦'}</div>
+      <div class="p-img-wrap">${imgHtml}</div>
       <div class="p-name">${p.name}</div>
       <div class="p-sub">${p.category}</div>
       <div class="p-price">${p.price} ${state.currency}</div>
@@ -536,7 +553,7 @@ function renderSalesGrid(){
   }).join('')}</div>`;
 }
 
-/* ---- Cart logic (shared) ---- */
+/* ---- Cart logic ---- */
 function addToCart(id){
   const p = state.products.find(x=>x.id===id);
   if(!p) return;
@@ -579,12 +596,20 @@ function openCheckoutSheet(){
       <div class="qty-ctrl"><button onclick="changeQty('${p.id}',-1); reopenCheckoutIfOpen();">−</button><span>${l.qty}</span><button onclick="changeQty('${p.id}',1); reopenCheckoutIfOpen();">+</button></div>
     </div>`;
   }).join('');
-  const custOptions = `<option value="">بدون عميل</option>` + state.customers.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  
+  const query = (state.customerSearchQuery || '').trim().toLowerCase();
+  const filteredCusts = query ? state.customers.filter(c => c.name.toLowerCase().includes(query) || (c.phone && c.phone.includes(query))) : state.customers;
+  const custOptions = `<option value="">بدون عميل</option>` + filteredCusts.map(c=>`<option value="${c.id}">${c.name} ${c.phone? '('+c.phone+')':''}</option>`).join('');
+
   openSheet(`
     <h2>إتمام الطلب</h2>
-    <div style="max-height:34vh; overflow-y:auto;">${rows}</div>
+    <div style="max-height:26vh; overflow-y:auto;">${rows}</div>
     <div class="cart-total-row"><span>الإجمالي</span><span>${cartTotal()} ${state.currency}</span></div>
-    <div class="field"><label>العميل (اختياري)</label><select id="chkCustomer">${custOptions}</select></div>
+    <div class="field">
+      <label>العميل (اختياري)</label>
+      <input type="text" placeholder="ابحث عن العميل بالاسم أو الرقم..." value="${escapeAttr(state.customerSearchQuery)}" oninput="state.customerSearchQuery=this.value; reopenCheckoutIfOpen();" style="margin-bottom:6px;">
+      <select id="chkCustomer">${custOptions}</select>
+    </div>
     <div class="field"><label>طريقة الدفع</label>
       <div class="chips" style="padding:0; margin:0;">
         <button type="button" class="chip active" onclick="pickPay(this,'نقدي')">نقدي</button>
@@ -611,6 +636,7 @@ async function confirmSale(){
   const sale = {id:uid(), items, total:cartTotal(), customerId, payMethod:window.__payMethod||'نقدي', date:new Date().toISOString()};
   state.sales.push(sale);
   state.cart = [];
+  state.customerSearchQuery = '';
   await Promise.all([sSet('products', state.products), sSet('sales', state.sales)]);
   closeSheet();
   render();
@@ -618,7 +644,7 @@ async function confirmSale(){
 }
 
 /* =====================================================================
-   INVENTORY (mobile list + desktop table)
+   INVENTORY
    ===================================================================== */
 function filteredProducts(q){
   q = (q||'').trim();
@@ -629,7 +655,7 @@ function renderInventoryList(){
   if(!list.length) return `<div class="empty">${ICONS.box2}<div>لا توجد منتجات — اضغط + للإضافة</div></div>`;
   return list.map(p=>`
     <div class="list-row">
-      <div class="info"><div class="title">${p.emoji||'📦'} ${p.name}</div><div class="sub">${p.category} · كود ${p.code||'—'} · ${p.price} ${state.currency}</div></div>
+      <div class="info"><div class="title">${p.name}</div><div class="sub">${p.category} · كود ${p.code||'—'} · ${p.price} ${state.currency}</div></div>
       <div class="row-actions">
         <span class="stock-badge ${p.stock<=5?'low':''}" style="position:static;">${p.stock}</span>
         <button class="mini-btn" onclick="openProductForm('${p.id}')">${ICONS.edit}</button>
@@ -650,7 +676,7 @@ function renderInventoryTable(){
   if(!list.length) return stat + `<div class="empty">${ICONS.box2}<div>لا توجد منتجات مطابقة</div></div>`;
   const rows = list.map(p=>`
     <tr>
-      <td><span style="font-size:18px; margin-left:6px;">${p.emoji||'📦'}</span><span class="cell-main">${p.name}</span></td>
+      <td><span class="cell-main">${p.name}</span></td>
       <td>${p.category}</td>
       <td>${p.code||'—'}</td>
       <td>${p.price} ${state.currency}</td>
@@ -674,7 +700,8 @@ function openProductForm(id){
       <div class="field"><label>السعر (${state.currency})</label><input id="fPrice" type="number" inputmode="decimal" value="${p?p.price:''}"></div>
       <div class="field"><label>الكمية بالمخزون</label><input id="fStock" type="number" inputmode="numeric" value="${p?p.stock:''}"></div>
     </div>
-    <div class="field"><label>الفئة</label><select id="fCat">${CATS.filter(c=>c!=='الكل').map(c=>`<option ${p&&p.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
+    <div class="field"><label>الفئة</label><select id="fCat">${state.categories.map(c=>`<option ${p&&p.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
+    <div class="field"><label>رابط صورة المنتج (URL)</label><input id="fImage" value="${p?escapeAttr(p.image||''):''}" placeholder="https://example.com/image.jpg"></div>
     <div class="field"><label>كود المنتج / QR</label><input id="fCode" value="${p?escapeAttr(p.code||''):''}" placeholder="يمكن مسحه بالكاميرا"></div>
     <button class="btn" onclick="saveProduct(${p?`'${p.id}'`:'null'})">حفظ</button>
     <div class="btn-row"><button class="btn secondary" onclick="closeSheet()">إلغاء</button></div>
@@ -685,10 +712,11 @@ async function saveProduct(id){
   const price = parseFloat(document.getElementById('fPrice').value)||0;
   const category = document.getElementById('fCat').value;
   const stock = parseInt(document.getElementById('fStock').value)||0;
+  const image = document.getElementById('fImage').value.trim();
   const code = document.getElementById('fCode').value.trim();
   if(!name){ toast('الرجاء إدخال اسم المنتج'); return; }
-  if(id){ Object.assign(state.products.find(x=>x.id===id), {name, price, category, stock, code}); }
-  else state.products.push({id:uid(), name, price, category, stock, code, emoji:EMOJI[category]||'📦'});
+  if(id){ Object.assign(state.products.find(x=>x.id===id), {name, price, category, stock, image, code}); }
+  else state.products.push({id:uid(), name, price, category, stock, image, code});
   await sSet('products', state.products);
   closeSheet(); render(); toast('تم الحفظ');
 }
@@ -699,7 +727,7 @@ async function deleteProduct(id){
 }
 
 /* =====================================================================
-   CUSTOMERS (mobile list + desktop table)
+   CUSTOMERS
    ===================================================================== */
 function filteredCustomers(q){
   q = (q||'').trim();
@@ -818,9 +846,19 @@ function renderReportsDashboard(){
 }
 
 /* =====================================================================
-   SETTINGS
+   SETTINGS & CATEGORIES MANAGEMENT
    ===================================================================== */
 function settingsCardsHtml(){
+  const catsHtml = state.categories.map(c=>`
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--divider);">
+      <span>${c}</span>
+      <div style="display:flex; gap:6px;">
+        <button class="mini-btn" onclick="openEditCategory('${escapeAttr(c)}')">${ICONS.edit}</button>
+        <button class="mini-btn danger" onclick="deleteCategory('${escapeAttr(c)}')">${ICONS.trash}</button>
+      </div>
+    </div>
+  `).join('');
+
   return `
     <div class="settings-row">
       <div class="label">الوضع الداكن<div class="d">تفعيل المظهر الداكن للتطبيق</div></div>
@@ -832,16 +870,83 @@ function settingsCardsHtml(){
         ${['ج.م','$','ر.س','د.إ'].map(c=>`<option ${state.currency===c?'selected':''}>${c}</option>`).join('')}
       </select>
     </div>
+    <div class="settings-row" style="flex-direction:column; align-items:stretch; gap:10px;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div class="label">إدارة التصنيفات</div>
+        <button class="btn-small" onclick="openAddCategory()">${ICONS.plus}تصنيف جديد</button>
+      </div>
+      <div style="max-height:180px; overflow-y:auto;">${catsHtml}</div>
+    </div>
     <div class="settings-row" onclick="resetDemo()" style="cursor:pointer;">
       <div class="label" style="color:var(--danger);">إعادة تعيين البيانات</div><span style="color:var(--text2);">›</span>
     </div>`;
 }
 function renderSettingsBody(){
-  return settingsCardsHtml() + `<div class="empty" style="padding-top:30px;">مستوحى من نظام uniCenta oPOS — نسخة ويب مبسطة</div>`;
+  return settingsCardsHtml() + `<div class="empty" style="padding-top:20px;">نقطة البيع - نسخة ويب مبسطة</div>`;
 }
 function renderSettingsDashboard(){
   return `<div class="settings-grid" style="max-width:640px;">${settingsCardsHtml()}</div>`;
 }
+
+function openAddCategory(){
+  openSheet(`
+    <h2>إضافة تصنيف جديد</h2>
+    <div class="field"><label>اسم التصنيف</label><input id="newCatName" placeholder="مثال: مشروبات ساخنة"></div>
+    <button class="btn" onclick="saveNewCategory()">إضافة</button>
+    <div class="btn-row"><button class="btn secondary" onclick="closeSheet()">إلغاء</button></div>
+  `);
+}
+async function saveNewCategory(){
+  const name = document.getElementById('newCatName').value.trim();
+  if(!name){ toast('الرجاء إدخال اسم التصنيف'); return; }
+  if(state.categories.includes(name)){ toast('هذا التصنيف موجود مسبقاً'); return; }
+  state.categories.push(name);
+  await sSet('categories', state.categories);
+  closeSheet(); render(); toast('تمت إضافة التصنيف بنجاح');
+}
+
+function openEditCategory(oldName){
+  openSheet(`
+    <h2>تعديل التصنيف</h2>
+    <div class="field"><label>اسم التصنيف الجديد</label><input id="editCatName" value="${escapeAttr(oldName)}"></div>
+    <button class="btn" onclick="updateCategory('${escapeAttr(oldName)}')">حفظ التعديل</button>
+    <div class="btn-row"><button class="btn secondary" onclick="closeSheet()">إلغاء</button></div>
+  `);
+}
+async function updateCategory(oldName){
+  const newName = document.getElementById('editCatName').value.trim();
+  if(!newName){ toast('الرجاء إدخال اسم التصنيف'); return; }
+  if(newName === oldName){ closeSheet(); return; }
+  if(state.categories.includes(newName)){ toast('هذا التصنيف موجود مسبقاً'); return; }
+  
+  const idx = state.categories.indexOf(oldName);
+  if(idx !== -1) state.categories[idx] = newName;
+  
+  // Update products with this category
+  state.products.forEach(p=>{
+    if(p.category === oldName) p.category = newName;
+  });
+  if(state.cat === oldName) state.cat = newName;
+
+  await Promise.all([sSet('categories', state.categories), sSet('products', state.products)]);
+  closeSheet(); render(); toast('تم تعديل التصنيف بنجاح');
+}
+
+async function deleteCategory(catName){
+  if(state.categories.length <= 1){ toast('يجب أن يبقى تصنيف واحد على الأقل'); return; }
+  if(!confirm(`هل أنت متأكد من حذف التصنيف "${catName}"؟ سيتم نقل المنتجات التابعة له إلى أول تصنيف متاحة.`)) return;
+  
+  state.categories = state.categories.filter(c => c !== catName);
+  const fallbackCat = state.categories[0];
+  state.products.forEach(p=>{
+    if(p.category === catName) p.category = fallbackCat;
+  });
+  if(state.cat === catName) state.cat = 'الكل';
+
+  await Promise.all([sSet('categories', state.categories), sSet('products', state.products)]);
+  render(); toast('تم حذف التصنيف');
+}
+
 async function toggleTheme(){
   state.theme = state.theme==='dark' ? 'light' : 'dark';
   document.body.setAttribute('data-theme', state.theme);
@@ -854,13 +959,13 @@ async function changeCurrency(val){
   render();
 }
 async function resetDemo(){
-  state.products = seedProducts(); state.customers=[]; state.sales=[]; state.cart=[];
-  await Promise.all([sSet('products',state.products), sSet('customers',state.customers), sSet('sales',state.sales)]);
+  state.products = seedProducts(); state.customers=[]; state.sales=[]; state.cart=[]; state.categories=defaultCategories;
+  await Promise.all([sSet('products',state.products), sSet('customers',state.customers), sSet('sales',state.sales), sSet('categories',state.categories)]);
   render(); toast('تمت إعادة التعيين');
 }
 
 /* =====================================================================
-   QR / BARCODE SCANNER (shared)
+   QR / BARCODE SCANNER
    ===================================================================== */
 let scanStream, scanRAF;
 async function openScanner(){
