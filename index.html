@@ -77,7 +77,7 @@
     background:var(--card); border-radius:var(--radius); padding:12px 14px; display:flex; align-items:center;
     justify-content:space-between; gap:10px; margin-bottom:10px; box-shadow:var(--shadow);
   }
-  .list-row .info{display:flex; flex-direction:column; gap:2px; min-width:0;}
+  .list-row .info{display:flex; flex-direction:column; gap:2px; min-width:0; flex:1; cursor:pointer;}
   .list-row .title{font-weight:600; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .list-row .sub{font-size:12.5px; color:var(--text2);}
   .row-actions{display:flex; gap:6px; flex:none;}
@@ -120,7 +120,7 @@
     background:var(--bg); width:100%; max-width:560px; border-radius:20px 20px 0 0; padding:10px 18px 28px;
     max-height:88vh; overflow-y:auto; animation:up .25s ease;
   }
-  .sheet-overlay.centered .sheet{border-radius:20px; max-width:440px; animation:pop .18s ease;}
+  .sheet-overlay.centered .sheet{border-radius:20px; max-width:480px; animation:pop .18s ease;}
   @keyframes up{from{transform:translateY(30px); opacity:0;} to{transform:translateY(0); opacity:1;}}
   @keyframes pop{from{transform:scale(.96); opacity:0;} to{transform:scale(1); opacity:1;}}
   .sheet-handle{width:36px; height:5px; background:var(--divider); border-radius:100px; margin:4px auto 14px;}
@@ -177,7 +177,10 @@
   .bar-row .bl{width:110px; font-size:13px; flex:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .bar-track{flex:1; height:10px; background:var(--card2); border-radius:100px; overflow:hidden;}
   .bar-fill{height:100%; background:var(--accent); border-radius:100px;}
-  .bar-val{font-size:12.5px; color:var(--text2); flex:none; width:40px; text-align:left;}
+  .bar-val{font-size:12.5px; color:var(--text2); flex:none; width:50px; text-align:left;}
+
+  .chart-box{background:var(--card); border-radius:var(--radius); padding:16px; margin-top:14px; box-shadow:var(--shadow);}
+  .chart-box h4{margin:0 0 12px; font-size:15px;}
 
   .toast{
     position:fixed; bottom:calc(100px + var(--safe-b)); left:50%; transform:translateX(-50%); background:var(--text);
@@ -262,6 +265,12 @@
   .dash-panel h3{margin:0 0 14px; font-size:16px;}
 
   .settings-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+
+  @media print {
+    body * { visibility: hidden; }
+    #printableInvoice, #printableInvoice * { visibility: visible; }
+    #printableInvoice { position: absolute; left: 0; top: 0; width: 100%; background: #fff; color: #000; padding: 20px; }
+  }
 </style>
 </head>
 <body data-theme="light">
@@ -289,6 +298,52 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
 <script>
+/* =====================================================================
+   SOUND EFFECTS SYSTEM (Web Audio API)
+   ===================================================================== */
+let audioCtx = null;
+function initAudio(){
+  if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+function playSound(type){
+  try{
+    initAudio();
+    if(!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    
+    const now = audioCtx.currentTime;
+    if(type === 'click'){
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(400, now);
+      osc.frequency.exponentialRampToValueAtTime(200, now + 0.05);
+      gain.gain.setValueAtTime(0.1, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+      osc.start(now);
+      osc.stop(now + 0.05);
+    } else if(type === 'success'){
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(523.25, now); // C5
+      osc.frequency.setValueAtTime(659.25, now + 0.08); // E5
+      osc.frequency.setValueAtTime(783.99, now + 0.16); // G5
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+      osc.start(now);
+      osc.stop(now + 0.3);
+    } else if(type === 'delete'){
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(220, now);
+      osc.frequency.exponentialRampToValueAtTime(110, now + 0.15);
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+      osc.start(now);
+      osc.stop(now + 0.15);
+    }
+  }catch(e){console.error(e);}
+}
+
 const ICONS = {
   cart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>',
   box:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/></svg>',
@@ -386,7 +441,10 @@ function render(){
   document.getElementById('desktopApp').style.display = isDesktop ? 'flex' : 'none';
   if(isDesktop) renderDesktop(); else renderMobile();
 }
-function switchView(v){ state.view=v; render(); }
+function switchView(v){
+  playSound('click');
+  state.view=v; render();
+}
 
 function renderMobile(){
   const app = document.getElementById('mobileApp');
@@ -416,12 +474,12 @@ function renderMobileHeader(){
   let extra = '';
   const allCats = ['الكل', ...state.categories];
   if(state.view==='sales'){
-    extra = `<div class="search">${ICONS.search}<input placeholder="ابحث عن منتج" value="${escapeAttr(state.search)}" oninput="state.search=this.value; render()"></div>
+    extra = `<div class="search">${ICONS.search}<input id="searchInput" placeholder="ابحث عن منتج" value="${escapeAttr(state.search)}" oninput="state.search=this.value; filterProductsDOM()"></div>
     <div class="chips">${allCats.map(c=>`<button class="chip ${state.cat===c?'active':''}" onclick="state.cat='${c}'; render()">${c}</button>`).join('')}</div>`;
   } else if(state.view==='inventory'){
-    extra = `<div class="search">${ICONS.search}<input placeholder="ابحث في المخزون" value="${escapeAttr(state.invSearch)}" oninput="state.invSearch=this.value; render()"></div>`;
+    extra = `<div class="search">${ICONS.search}<input id="invSearchInput" placeholder="ابحث في المخزون" value="${escapeAttr(state.invSearch)}" oninput="state.invSearch=this.value; filterInventoryDOM()"></div>`;
   } else if(state.view==='customers'){
-    extra = `<div class="search">${ICONS.search}<input placeholder="ابحث عن عميل" value="${escapeAttr(state.custSearch)}" oninput="state.custSearch=this.value; render()"></div>`;
+    extra = `<div class="search">${ICONS.search}<input id="custSearchInput" placeholder="ابحث عن عميل" value="${escapeAttr(state.custSearch)}" oninput="state.custSearch=this.value; filterCustomersDOM()"></div>`;
   }
   return `<header class="top"><div class="top-row"><h1>${titles[state.view]}</h1>${rightBtn}</div>${extra}</header>`;
 }
@@ -451,13 +509,13 @@ function renderDesktop(){
 function renderDesktopTopbar(title){
   let searchBox = '', actionBtn = '';
   if(state.view==='sales'){
-    searchBox = `<div class="dash-search">${ICONS.search}<input placeholder="ابحث عن منتج" value="${escapeAttr(state.search)}" oninput="state.search=this.value; renderDesktop()"></div>`;
+    searchBox = `<div class="dash-search">${ICONS.search}<input id="searchInput" placeholder="ابحث عن منتج" value="${escapeAttr(state.search)}" oninput="state.search=this.value; filterProductsDOM()"></div>`;
     actionBtn = `<button class="btn-small" onclick="openScanner()">${ICONS.qr}مسح كود</button>`;
   } else if(state.view==='inventory'){
-    searchBox = `<div class="dash-search">${ICONS.search}<input placeholder="ابحث في المخزون" value="${escapeAttr(state.invSearch)}" oninput="state.invSearch=this.value; renderDesktop()"></div>`;
+    searchBox = `<div class="dash-search">${ICONS.search}<input id="invSearchInput" placeholder="ابحث في المخزون" value="${escapeAttr(state.invSearch)}" oninput="state.invSearch=this.value; filterInventoryDOM()"></div>`;
     actionBtn = `<button class="btn-small" onclick="openProductForm()">${ICONS.plus}منتج جديد</button>`;
   } else if(state.view==='customers'){
-    searchBox = `<div class="dash-search">${ICONS.search}<input placeholder="ابحث عن عميل" value="${escapeAttr(state.custSearch)}" oninput="state.custSearch=this.value; renderDesktop()"></div>`;
+    searchBox = `<div class="dash-search">${ICONS.search}<input id="custSearchInput" placeholder="ابحث عن عميل" value="${escapeAttr(state.custSearch)}" oninput="state.custSearch=this.value; filterCustomersDOM()"></div>`;
     actionBtn = `<button class="btn-small" onclick="openCustomerForm()">${ICONS.plus}عميل جديد</button>`;
   }
   return `<header class="dash-topbar"><h1>${title}</h1><div class="dash-topbar-actions">${searchBox}${actionBtn}</div></header>`;
@@ -474,10 +532,10 @@ function renderPosLayout(){
   const allCats = ['الكل', ...state.categories];
   return `<div class="pos-layout">
     <div class="pos-products">
-      <div class="dash-chips" style="margin-bottom:16px;">${allCats.map(c=>`<button class="chip ${state.cat===c?'active':''}" onclick="state.cat='${c}'; renderDesktop()">${c}</button>`).join('')}</div>
-      ${renderSalesGrid()}
+      <div class="dash-chips" style="margin-bottom:16px;">${allCats.map(c=>`<button class="chip ${state.cat===c?'active':''}" onclick="state.cat='${c}'; render()">${c}</button>`).join('')}</div>
+      <div id="productsGridContainer">${renderSalesGridContent()}</div>
     </div>
-    <div class="order-panel">${renderOrderPanel()}</div>
+    <div class="order-panel" id="orderPanelContainer">${renderOrderPanel()}</div>
   </div>`;
 }
 
@@ -519,8 +577,12 @@ function renderOrderPanel(){
 }
 
 function renderSalesGrid(){
+  return `<div id="productsGridContainer">${renderSalesGridContent()}</div>`;
+}
+
+function renderSalesGridContent(){
   let list = state.products.filter(p=> state.cat==='الكل' || p.category===state.cat);
-  const q = state.search.trim();
+  const q = (state.search||'').trim();
   if(q) list = list.filter(p=> p.name.includes(q));
   if(!list.length) return `<div class="empty">${ICONS.box2}<div>لا توجد منتجات مطابقة</div></div>`;
   return `<div class="grid">${list.map(p=>{
@@ -536,16 +598,29 @@ function renderSalesGrid(){
   }).join('')}</div>`;
 }
 
+function filterProductsDOM(){
+  const container = document.getElementById('productsGridContainer');
+  if(container) container.innerHTML = renderSalesGridContent();
+}
+
 function addToCart(id){
   const p = state.products.find(x=>x.id===id);
   if(!p) return;
   if(p.stock<=0){ toast('الكمية غير متوفرة في المخزون'); return; }
+  playSound('click');
   const line = state.cart.find(l=>l.id===id);
   if(line){
     if(line.qty>=p.stock){ toast('لا يوجد مخزون كافٍ'); return; }
     line.qty++;
   } else state.cart.push({id, qty:1});
-  render();
+  
+  if(isDesktop){
+    const panel = document.getElementById('orderPanelContainer');
+    if(panel) panel.innerHTML = renderOrderPanel();
+    if(document.getElementById('mobileApp').style.display !== 'none') render();
+  } else {
+    render();
+  }
   toast(`أُضيف: ${p.name}`);
 }
 function cartTotal(){
@@ -555,13 +630,22 @@ function cartTotal(){
   },0);
 }
 function changeQty(id, delta){
+  playSound('click');
   const line = state.cart.find(l=>l.id===id);
   const p = state.products.find(x=>x.id===id);
   if(!line) return;
   line.qty += delta;
   if(line.qty > p.stock){ line.qty = p.stock; toast('لا يوجد مخزون كافٍ'); }
   if(line.qty<=0) state.cart = state.cart.filter(l=>l.id!==id);
-  render();
+  
+  if(isDesktop){
+    const panel = document.getElementById('orderPanelContainer');
+    if(panel) panel.innerHTML = renderOrderPanel();
+    const cartBar = document.querySelector('.cart-bar');
+    if(cartBar) cartBar.outerHTML = state.cart.length ? renderCartBar() : '';
+  } else {
+    render();
+  }
 }
 function pickPay(btn, val){
   btn.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('active'));
@@ -570,6 +654,7 @@ function pickPay(btn, val){
 }
 function openCheckoutSheet(){
   if(!state.cart.length) return;
+  playSound('click');
   const rows = state.cart.map(l=>{
     const p = state.products.find(x=>x.id===l.id);
     if(!p) return '';
@@ -608,10 +693,8 @@ function reopenCheckoutIfOpen(){
   if(document.getElementById('sheetOverlay').classList.contains('show')) openCheckoutSheet();
 }
 
-/* =====================================================================
-   CUSTOMER SELECTION POP-UP MODAL (Inside Checkout)
-   ===================================================================== */
 function openCustomerSelectModal(){
+  playSound('click');
   const query = (state.customerModalSearch || '').trim().toLowerCase();
   const list = query ? state.customers.filter(c => c.name.toLowerCase().includes(query) || (c.phone && c.phone.includes(query))) : state.customers;
 
@@ -643,12 +726,14 @@ function openCustomerSelectModal(){
 }
 
 function selectCustomerAndReturn(id){
+  playSound('click');
   state.selectedCustomerId = id;
   state.customerModalSearch = '';
   openCheckoutSheet();
 }
 
 function openQuickNewCustomerModal(){
+  playSound('click');
   openSheet(`
     <h2>إضافة عميل سريع</h2>
     <div class="field"><label>اسم العميل</label><input id="qCustName" placeholder="الاسم الكامل"></div>
@@ -667,6 +752,7 @@ async function saveQuickCustomer(){
   state.selectedCustomerId = newCust.id;
   state.customerModalSearch = '';
   await sSet('customers', state.customers);
+  playSound('success');
   openCheckoutSheet();
   toast('تمت إضافة العميل واختياره');
 }
@@ -690,24 +776,28 @@ async function confirmSale(){
   state.cart = [];
   state.selectedCustomerId = null;
   await Promise.all([sSet('products', state.products), sSet('sales', state.sales)]);
+  playSound('success');
   closeSheet();
   render();
   toast('تم الدفع بنجاح ✓');
 }
 
 /* =====================================================================
-   INVENTORY & LOCAL IMAGE UPLOAD HANDLING
+   INVENTORY & LOCAL IMAGE UPLOAD
    ===================================================================== */
 function filteredProducts(q){
   q = (q||'').trim();
   return q ? state.products.filter(p=>p.name.includes(q)) : state.products;
 }
 function renderInventoryList(){
+  return `<div id="inventoryListContainer">${renderInventoryListContent()}</div>`;
+}
+function renderInventoryListContent(){
   const list = filteredProducts(state.invSearch);
   if(!list.length) return `<div class="empty">${ICONS.box2}<div>لا توجد منتجات — اضغط + للإضافة</div></div>`;
   return list.map(p=>`
     <div class="list-row">
-      <div class="info"><div class="title">${p.name}</div><div class="sub">${p.category} · كود ${p.code||'—'} · ${p.price} ${state.currency}</div></div>
+      <div class="info" onclick="openProductForm('${p.id}')"><div class="title">${p.name}</div><div class="sub">${p.category} · كود ${p.code||'—'} · ${p.price} ${state.currency}</div></div>
       <div class="row-actions">
         <span class="stock-badge ${p.stock<=5?'low':''}" style="position:static;">${p.stock}</span>
         <button class="mini-btn" onclick="openProductForm('${p.id}')">${ICONS.edit}</button>
@@ -716,6 +806,11 @@ function renderInventoryList(){
     </div>
   `).join('');
 }
+function filterInventoryDOM(){
+  const container = document.getElementById('inventoryListContainer');
+  if(container) container.innerHTML = renderInventoryListContent();
+}
+
 function renderInventoryTable(){
   const list = filteredProducts(state.invSearch);
   const lowCount = state.products.filter(p=>p.stock<=5).length;
@@ -745,6 +840,7 @@ function renderInventoryTable(){
 }
 
 function openProductForm(id){
+  playSound('click');
   const p = id ? state.products.find(x=>x.id===id) : null;
   window.__tempProductImage = p ? (p.image || '') : '';
 
@@ -803,10 +899,12 @@ async function saveProduct(id){
     state.products.push({id:uid(), name, price, category, stock, image, code});
   }
   await sSet('products', state.products);
+  playSound('success');
   closeSheet(); render(); toast('تم الحفظ بنجاح');
 }
 
 async function deleteProduct(id){
+  playSound('delete');
   state.products = state.products.filter(p=>p.id!==id);
   await sSet('products', state.products);
   render(); toast('تم الحذف');
@@ -820,11 +918,14 @@ function filteredCustomers(q){
   return q ? state.customers.filter(c=>c.name.includes(q)) : state.customers;
 }
 function renderCustomersList(){
+  return `<div id="customersListContainer">${renderCustomersListContent()}</div>`;
+}
+function renderCustomersListContent(){
   const list = filteredCustomers(state.custSearch);
   if(!list.length) return `<div class="empty">${ICONS.users}<div>لا يوجد عملاء بعد — اضغط + للإضافة</div></div>`;
   return list.map(c=>`
     <div class="list-row">
-      <div class="info"><div class="title">${c.name}</div><div class="sub">${c.phone||'بدون رقم هاتف'}</div></div>
+      <div class="info" onclick="openCustomerForm('${c.id}')"><div class="title">${c.name}</div><div class="sub">${c.phone||'بدون رقم هاتف'}</div></div>
       <div class="row-actions">
         <button class="mini-btn" onclick="openCustomerForm('${c.id}')">${ICONS.edit}</button>
         <button class="mini-btn danger" onclick="deleteCustomer('${c.id}')">${ICONS.trash}</button>
@@ -832,6 +933,11 @@ function renderCustomersList(){
     </div>
   `).join('');
 }
+function filterCustomersDOM(){
+  const container = document.getElementById('customersListContainer');
+  if(container) container.innerHTML = renderCustomersListContent();
+}
+
 function renderCustomersTable(){
   const list = filteredCustomers(state.custSearch);
   if(!list.length) return `<div class="empty">${ICONS.users}<div>لا يوجد عملاء مطابقون</div></div>`;
@@ -853,6 +959,7 @@ function renderCustomersTable(){
   </table></div>`;
 }
 function openCustomerForm(id){
+  playSound('click');
   const c = id ? state.customers.find(x=>x.id===id) : null;
   openSheet(`
     <h2>${c?'تعديل العميل':'عميل جديد'}</h2>
@@ -869,30 +976,53 @@ async function saveCustomer(id){
   if(id){ Object.assign(state.customers.find(x=>x.id===id), {name, phone}); }
   else state.customers.push({id:uid(), name, phone});
   await sSet('customers', state.customers);
+  playSound('success');
   closeSheet(); render(); toast('تم الحفظ');
 }
 async function deleteCustomer(id){
+  playSound('delete');
   state.customers = state.customers.filter(c=>c.id!==id);
   await sSet('customers', state.customers);
   render(); toast('تم الحذف');
 }
 
 /* =====================================================================
-   REPORTS
+   REPORTS & CHARTS & INVOICE DETAILS
    ===================================================================== */
 function computeReportData(){
   const today = new Date().toDateString();
   const todaySales = state.sales.filter(s=> new Date(s.date).toDateString()===today);
   const todayTotal = todaySales.reduce((s,x)=>s+x.total,0);
   const totalAll = state.sales.reduce((s,x)=>s+x.total,0);
+  
   const qtyMap = {};
   state.sales.forEach(s=> s.items.forEach(it=>{ qtyMap[it.name]=(qtyMap[it.name]||0)+it.qty; }));
   const top = Object.entries(qtyMap).sort((a,b)=>b[1]-a[1]).slice(0,5);
-  return {todaySales, todayTotal, totalAll, top};
+
+  // Monthly and Yearly Sales aggregation
+  const monthlyMap = {};
+  const yearlyMap = {};
+  state.sales.forEach(s=>{
+    const d = new Date(s.date);
+    const mKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const yKey = `${d.getFullYear()}`;
+    monthlyMap[mKey] = (monthlyMap[mKey]||0) + s.total;
+    yearlyMap[yKey] = (yearlyMap[yKey]||0) + s.total;
+  });
+
+  const months = Object.entries(monthlyMap).sort((a,b)=>a[0].localeCompare(b[0])).slice(-6); // Last 6 months
+  const years = Object.entries(yearlyMap).sort((a,b)=>a[0].localeCompare(b[0]));
+
+  return {todaySales, todayTotal, totalAll, top, months, years};
 }
+
 function renderReportsBody(){
-  const {todaySales, todayTotal, totalAll, top} = computeReportData();
+  const {todaySales, todayTotal, totalAll, top, months, years} = computeReportData();
   const maxQty = top.length? top[0][1] : 1;
+  const maxMonthVal = months.length ? Math.max(...months.map(m=>m[1])) : 1;
+  const maxYearVal = years.length ? Math.max(...years.map(y=>y[1])) : 1;
+  const recentSales = [...state.sales].reverse();
+
   return `
     <div class="stat-grid">
       <div class="stat-card"><div class="v">${todayTotal} ${state.currency}</div><div class="l">مبيعات اليوم</div></div>
@@ -900,14 +1030,43 @@ function renderReportsBody(){
       <div class="stat-card"><div class="v">${totalAll} ${state.currency}</div><div class="l">إجمالي المبيعات</div></div>
       <div class="stat-card"><div class="v">${state.sales.length}</div><div class="l">إجمالي الفواتير</div></div>
     </div>
+
     <div class="section-title">الأكثر مبيعًا</div>
     ${top.length? top.map(([name,qty])=>`<div class="bar-row"><div class="bl">${name}</div><div class="bar-track"><div class="bar-fill" style="width:${(qty/maxQty*100).toFixed(0)}%"></div></div><div class="bar-val">${qty}</div></div>`).join('') : `<div class="empty">لا توجد مبيعات مسجلة بعد</div>`}
+
+    <div class="chart-box">
+      <h4>المبيعات الشهرية</h4>
+      ${months.length ? months.map(([m,val])=>`<div class="bar-row"><div class="bl">${m}</div><div class="bar-track"><div class="bar-fill" style="width:${(val/maxMonthVal*100).toFixed(0)}%; background:var(--accent2);"></div></div><div class="bar-val" style="width:70px; text-align:left;">${val}</div></div>`).join('') : `<div class="empty" style="padding:20px;">لا توجد بيانات شهرية</div>`}
+    </div>
+
+    <div class="chart-box">
+      <h4>المبيعات السنوية</h4>
+      ${years.length ? years.map(([y,val])=>`<div class="bar-row"><div class="bl">${y}</div><div class="bar-track"><div class="bar-fill" style="width:${(val/maxYearVal*100).toFixed(0)}%; background:var(--warn);"></div></div><div class="bar-val" style="width:70px; text-align:left;">${val}</div></div>`).join('') : `<div class="empty" style="padding:20px;">لا توجد بيانات سنوية</div>`}
+    </div>
+
+    <div class="section-title">سجل الفواتير (اضغط على الفاتورة للتفاصيل)</div>
+    ${recentSales.length ? recentSales.map(s=>{
+      const cust = state.customers.find(c=>c.id===s.customerId);
+      const cName = cust ? cust.name : 'عميل نقدي';
+      const timeStr = new Date(s.date).toLocaleString('ar-EG');
+      return `<div class="list-row" onclick="openInvoiceDetails('${s.id}')">
+        <div class="info">
+          <div class="title">فاتورة #${s.id.toUpperCase()} — ${cName}</div>
+          <div class="sub">${timeStr} · ${s.payMethod}</div>
+        </div>
+        <div style="font-weight:700; color:var(--accent); font-size:15px; flex:none;">${s.total} ${state.currency}</div>
+      </div>`;
+    }).join('') : `<div class="empty">لا توجد فواتير</div>`}
   `;
 }
+
 function renderReportsDashboard(){
-  const {todaySales, todayTotal, totalAll, top} = computeReportData();
+  const {todaySales, todayTotal, totalAll, top, months, years} = computeReportData();
   const maxQty = top.length? top[0][1] : 1;
-  const recent = [...state.sales].reverse().slice(0,6);
+  const maxMonthVal = months.length ? Math.max(...months.map(m=>m[1])) : 1;
+  const maxYearVal = years.length ? Math.max(...years.map(y=>y[1])) : 1;
+  const recent = [...state.sales].reverse();
+
   return `
     <div class="dash-stat-row">
       <div class="dash-stat-card"><div class="v">${todayTotal} ${state.currency}</div><div class="l">مبيعات اليوم</div></div>
@@ -921,14 +1080,61 @@ function renderReportsDashboard(){
         ${top.length? top.map(([name,qty])=>`<div class="bar-row"><div class="bl">${name}</div><div class="bar-track"><div class="bar-fill" style="width:${(qty/maxQty*100).toFixed(0)}%"></div></div><div class="bar-val">${qty}</div></div>`).join('') : `<div class="empty">لا توجد بيانات بعد</div>`}
       </div>
       <div class="dash-panel">
-        <h3>آخر الفواتير</h3>
-        ${recent.length? recent.map(s=>`<div class="bar-row" style="align-items:flex-start;">
-          <div class="bl" style="width:auto; flex:1;">${new Date(s.date).toLocaleString('ar-EG',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'})}</div>
-          <div class="bar-val" style="width:auto; font-weight:600; color:var(--text);">${s.total} ${state.currency}</div>
-        </div>`).join('') : `<div class="empty">لا توجد فواتير بعد</div>`}
+        <h3>المبيعات الشهرية والسنوية</h3>
+        <div style="font-weight:600; font-size:13px; margin-bottom:6px; color:var(--text2);">شهرياً</div>
+        ${months.length ? months.map(([m,val])=>`<div class="bar-row"><div class="bl">${m}</div><div class="bar-track"><div class="bar-fill" style="width:${(val/maxMonthVal*100).toFixed(0)}%; background:var(--accent2);"></div></div><div class="bar-val" style="width:60px;">${val}</div></div>`).join('') : ''}
+        <div style="font-weight:600; font-size:13px; margin:14px 0 6px; color:var(--text2);">سنوياً</div>
+        ${years.length ? years.map(([y,val])=>`<div class="bar-row"><div class="bl">${y}</div><div class="bar-track"><div class="bar-fill" style="width:${(val/maxYearVal*100).toFixed(0)}%; background:var(--warn);"></div></div><div class="bar-val" style="width:60px;">${val}</div></div>`).join('') : ''}
       </div>
     </div>
+    <div class="section-title" style="margin-top:24px;">سجل الفواتير الكامل</div>
+    <div class="dash-table-wrap" style="margin-top:10px;"><table class="dash-table">
+      <thead><tr><th>رقم الفاتورة</th><th>التاريخ</th><th>العميل</th><th>طريقة الدفع</th><th>الإجمالي</th><th></th></tr></thead>
+      <tbody>
+        ${recent.length ? recent.map(s=>{
+          const cust = state.customers.find(c=>c.id===s.customerId);
+          return `<tr>
+            <td class="cell-main">#${s.id.toUpperCase()}</td>
+            <td>${new Date(s.date).toLocaleString('ar-EG')}</td>
+            <td>${cust ? cust.name : 'نقدي'}</td>
+            <td>${s.payMethod}</td>
+            <td style="font-weight:700; color:var(--accent);">${s.total} ${state.currency}</td>
+            <td><button class="btn-small" onclick="openInvoiceDetails('${s.id}')" style="padding:5px 10px; font-size:12px;">التفاصيل</button></td>
+          </tr>`;
+        }).join('') : `<tr><td colspan="6" style="text-align:center; color:var(--text2);">لا توجد فواتير</td></tr>`}
+      </tbody>
+    </table></div>
   `;
+}
+
+function openInvoiceDetails(saleId){
+  playSound('click');
+  const s = state.sales.find(x=>x.id===saleId);
+  if(!s) return;
+  const cust = state.customers.find(c=>c.id===s.customerId);
+  const itemsHtml = s.items.map(i=>`
+    <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--divider);">
+      <div><b>${i.name}</b> <span style="font-size:12px; color:var(--text2);">(${i.qty} × ${i.price} ${state.currency})</span></div>
+      <div style="font-weight:600;">${i.qty * i.price} ${state.currency}</div>
+    </div>
+  `).join('');
+
+  openSheet(`
+    <div id="printableInvoice">
+      <h2>تفاصيل الفاتورة #${s.id.toUpperCase()}</h2>
+      <div style="font-size:13px; color:var(--text2); margin-bottom:14px;">
+        التاريخ: ${new Date(s.date).toLocaleString('ar-EG')}<br>
+        العميل: ${cust ? cust.name : 'عميل نقدي'} (${cust && cust.phone ? cust.phone : 'بدون هاتف'})<br>
+        طريقة الدفع: ${s.payMethod}
+      </div>
+      <div style="max-height:30vh; overflow-y:auto; margin-bottom:14px;">${itemsHtml}</div>
+      <div class="cart-total-row" style="border-top:2px solid var(--divider);"><span>الإجمالي النهائي</span><span>${s.total} ${state.currency}</span></div>
+    </div>
+    <div class="btn-row" style="margin-top:16px;">
+      <button class="btn" onclick="window.print()">طباعة / حفظ PDF</button>
+      <button class="btn secondary" onclick="closeSheet()">إغلاق</button>
+    </div>
+  `);
 }
 
 /* =====================================================================
@@ -975,6 +1181,7 @@ function renderSettingsDashboard(){
 }
 
 function openAddCategory(){
+  playSound('click');
   openSheet(`
     <h2>إضافة تصنيف جديد</h2>
     <div class="field"><label>اسم التصنيف</label><input id="newCatName" placeholder="مثال: مشروبات ساخنة"></div>
@@ -988,10 +1195,12 @@ async function saveNewCategory(){
   if(state.categories.includes(name)){ toast('هذا التصنيف موجود مسبقاً'); return; }
   state.categories.push(name);
   await sSet('categories', state.categories);
+  playSound('success');
   closeSheet(); render(); toast('تمت إضافة التصنيف بنجاح');
 }
 
 function openEditCategory(oldName){
+  playSound('click');
   openSheet(`
     <h2>تعديل التصنيف</h2>
     <div class="field"><label>اسم التصنيف الجديد</label><input id="editCatName" value="${escapeAttr(oldName)}"></div>
@@ -1014,12 +1223,14 @@ async function updateCategory(oldName){
   if(state.cat === oldName) state.cat = newName;
 
   await Promise.all([sSet('categories', state.categories), sSet('products', state.products)]);
+  playSound('success');
   closeSheet(); render(); toast('تم تعديل التصنيف بنجاح');
 }
 
 async function deleteCategory(catName){
   if(state.categories.length <= 1){ toast('يجب أن يبقى تصنيف واحد على الأقل'); return; }
   if(!confirm(`هل أنت متأكد من حذف التصنيف "${catName}"؟ سيتم نقل المنتجات التابعة له إلى أول تصنيف متاحة.`)) return;
+  playSound('delete');
   
   state.categories = state.categories.filter(c => c !== catName);
   const fallbackCat = state.categories[0];
@@ -1033,17 +1244,20 @@ async function deleteCategory(catName){
 }
 
 async function toggleTheme(){
+  playSound('click');
   state.theme = state.theme==='dark' ? 'light' : 'dark';
   document.body.setAttribute('data-theme', state.theme);
   await sSet('settings', {theme:state.theme, currency:state.currency});
   render();
 }
 async function changeCurrency(val){
+  playSound('click');
   state.currency = val;
   await sSet('settings', {theme:state.theme, currency:state.currency});
   render();
 }
 async function resetDemo(){
+  playSound('delete');
   state.products = seedProducts(); state.customers=[]; state.sales=[]; state.cart=[]; state.categories=defaultCategories;
   await Promise.all([sSet('products',state.products), sSet('customers',state.customers), sSet('sales',state.sales), sSet('categories',state.categories)]);
   render(); toast('تمت إعادة التعيين');
@@ -1054,6 +1268,7 @@ async function resetDemo(){
    ===================================================================== */
 let scanStream, scanRAF;
 async function openScanner(){
+  playSound('click');
   document.getElementById('scannerWrap').classList.add('show');
   try{
     scanStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
